@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # Add a tab to a per-task Chrome tab group, or close the group.
 #
-#   task-tab add HRS-1234 https://example.com/issue
-#   task-tab close HRS-1234
-#   task-tab collapse HRS-1234
+#   task-tab add ACME-1234 https://example.com/issue
+#   task-tab --focus add ACME-1234 https://example.com/issue   # jump to the tab
+#   task-tab close ACME-1234
+#   task-tab collapse ACME-1234
 #   task-tab site https://acme.atlassian.net
+#
+# Nothing steals focus unless --focus is given: tabs appear in the background and
+# the tab you were reading stays selected.
 #
 # Drives the "Task Tabs" Chrome extension by opening its control page — Chrome
 # accepts chrome-extension:// URLs from `open`, so no daemon is involved.
@@ -14,19 +18,31 @@
 
 set -eu
 
-state_dir="${TASK_TABS_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/task-tabs}"
-
-# Resolved through the symlink `install.sh` puts in ~/.local/bin, so the sibling
-# script is found whether this runs from the repo or from PATH.
+# Resolved through the symlink `install.sh` puts in ~/.local/bin, so the shared
+# library and the sibling script are found whether this runs from the repo or
+# from PATH.
 self="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$0")"
-task_color="$(dirname "$self")/task-color"
+bin_dir="$(dirname "$self")"
+. "$bin_dir/lib/common.sh"
+
+task_color="$bin_dir/task-color"
 
 color_override=""
-if [ "${1:-}" = "--color" ]; then
-    color_override="${2:-}"
-    [ -n "$color_override" ] || { echo "usage: task-tab --color <name> <action> ..." >&2; exit 2; }
-    shift 2
-fi
+focus=""
+while :; do
+    case "${1:-}" in
+        --color)
+            color_override="${2:-}"
+            [ -n "$color_override" ] || { echo "usage: task-tab --color <name> <action> ..." >&2; exit 2; }
+            shift 2 ;;
+        # Off by default: the point of the CLI is to arrange tabs without pulling
+        # the user out of whatever they are doing.
+        --focus)
+            focus="1"
+            shift ;;
+        *) break ;;
+    esac
+done
 
 action="${1:-}"
 group="${2:-}"
@@ -40,7 +56,7 @@ case "$action" in
     site)
         [ -n "$group" ] || { echo "usage: task-tab site <https://your.atlassian.net>" >&2; exit 2; } ;;
     *)
-        echo "usage: task-tab <add|close|collapse|site> <group|url> [url]" >&2; exit 2 ;;
+        echo "usage: task-tab [--color <name>] [--focus] <add|close|collapse|site> <group|url> [url]" >&2; exit 2 ;;
 esac
 
 id_file="$state_dir/extension-id"
@@ -48,10 +64,6 @@ id_file="$state_dir/extension-id"
 ext_id="$(tr -d '[:space:]' < "$id_file")"
 [ -n "$ext_id" ] || exit 0
 [ -d "/Applications/Google Chrome.app" ] || exit 0
-
-encode() {
-    python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
-}
 
 if [ "$action" = "site" ]; then
     control="chrome-extension://$ext_id/control.html?action=config&site=$(encode "$group")"
@@ -61,6 +73,7 @@ fi
 
 control="chrome-extension://$ext_id/control.html?action=$action&group=$(encode "$group")"
 [ -n "$url" ] && control="$control&url=$(encode "$url")"
+[ -n "$focus" ] && control="$control&focus=1"
 
 # The colour is assigned by task-color, not by the extension, so the terminal
 # label and the browser group always agree on it.

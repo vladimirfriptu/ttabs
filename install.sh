@@ -12,7 +12,8 @@ set -eu
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ext_dir="$repo/extension"
-state_dir="${TASK_TABS_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/task-tabs}"
+. "$repo/bin/lib/common.sh"
+
 bin_dir="${TASK_TABS_BIN:-$HOME/.local/bin}"
 id_file="$state_dir/extension-id"
 

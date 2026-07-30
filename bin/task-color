@@ -2,10 +2,10 @@
 # Assign and recall a task's colour — the anchor that ties a terminal tab to its
 # Chrome tab group.
 #
-#   task-color HRS-1234            -> "purple 🟪"
-#   task-color --chrome HRS-1234   -> "purple"
-#   task-color --emoji  HRS-1234   -> "🟪"
-#   task-color --release HRS-1234  -> forget it, return the colour to the pool
+#   task-color ACME-1234            -> "purple 🟪"
+#   task-color --chrome ACME-1234   -> "purple"
+#   task-color --emoji  ACME-1234   -> "🟪"
+#   task-color --release ACME-1234  -> forget it, return the colour to the pool
 #
 # The colour is picked once, on first call, from whatever is not currently taken
 # by another task, and then remembered — every later caller gets the same answer.
@@ -21,7 +21,11 @@ set -eu
 NAMES=(blue green purple yellow red grey)
 EMOJI=(🟦 🟩 🟪 🟨 🟥 ⬜)
 
-state_dir="${TASK_TABS_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/task-tabs}"
+# Resolved through the symlink `install.sh` puts in ~/.local/bin, so the shared
+# library is found whether this runs from the repo or from PATH.
+self="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$0")"
+. "$(dirname "$self")/lib/common.sh"
+
 store="$state_dir/colors"
 
 emoji_for() {

@@ -1,46 +1,17 @@
-// Keeps every task group's title in step with its Jira status.
+// Keeps every task group's title in step with its tracker status.
 //
 // Runs on an alarm, on browser start, and on demand right after `task-tab add`.
-// Authentication is the browser's own Jira session — no token is stored here, so
-// the sync is a no-op while that session is expired.
+// This file only orchestrates: where the statuses come from is `providers/`,
+// what to write is `lib/plan.js`.
 
-importScripts('statuses.js');
+import { trackedGroups } from './chrome/groups.js';
+import { rememberActiveTab, restoreFocus } from './chrome/focus.js';
+import { readSite, readTitles, writeTitles } from './chrome/store.js';
+import { planUpdates } from './lib/plan.js';
+import { fetchStatuses } from './providers/jira.js';
 
 const ALARM = 'jira-status-sync';
 const PERIOD_MINUTES = 5;
-
-const readSite = async () => {
-  const stored = await chrome.storage.local.get('site');
-  return stored.site ?? '';
-};
-
-const trackedGroups = async () => {
-  const groups = await chrome.tabGroups.query({});
-  const tracked = [];
-  for (const group of groups) {
-    const key = keyFromTitle(group.title ?? '');
-    if (key) tracked.push({ group, key });
-  }
-  return tracked;
-};
-
-const fetchStatuses = async (site, keys) => {
-  const jql = `key in (${keys.join(',')})`;
-  const query = new URLSearchParams({ jql, fields: 'status', maxResults: '100' });
-  const response = await fetch(`${site}/rest/api/3/search/jql?${query}`, {
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-  if (!response.ok) throw new Error(`Jira answered ${response.status}`);
-
-  const payload = await response.json();
-  const statuses = {};
-  for (const issue of payload.issues ?? []) {
-    const name = issue.fields?.status?.name;
-    if (name) statuses[issue.key] = name;
-  }
-  return statuses;
-};
 
 const sync = async () => {
   const site = await readSite();
@@ -54,25 +25,14 @@ const sync = async () => {
 
   const keys = [...new Set(tracked.map((t) => t.key))];
   const statuses = await fetchStatuses(site, keys);
+  const written = await readTitles();
 
-  const stored = await chrome.storage.local.get('titles');
-  const written = stored.titles ?? {};
-
-  for (const { group, key } of tracked) {
-    const status = statuses[key];
-    if (!status) continue;
-
-    const current = group.title ?? '';
-    if (!isOurTitle(current, key, written[key])) continue;
-
-    const title = titleFor(key, status);
-    if (title === current) continue;
-
-    await chrome.tabGroups.update(group.id, { title });
-    written[key] = title;
+  const { updates, titles } = planUpdates(tracked, statuses, written);
+  for (const { groupId, title } of updates) {
+    await chrome.tabGroups.update(groupId, { title });
   }
 
-  await chrome.storage.local.set({ titles: written });
+  await writeTitles(titles);
 };
 
 const runSync = () => sync().catch((e) => console.warn('[task-tabs] sync failed:', e));
@@ -93,6 +53,24 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) runSync();
 });
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === 'sync') runSync();
+chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
+  rememberActiveTab(tabId, windowId).catch((e) => console.warn('[task-tabs]', e));
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'sync') {
+    runSync();
+    return false;
+  }
+
+  if (message?.type === 'restoreFocus') {
+    // The control page waits for this before closing itself, so the answer has
+    // to be async — hence the `true`.
+    restoreFocus(message.windowId)
+      .catch((e) => console.warn('[task-tabs]', e))
+      .finally(() => sendResponse(true));
+    return true;
+  }
+
+  return false;
 });

@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Task Tabs",
-  "version": "1.1",
+  "version": "1.2",
   "description": "Groups browser tabs by Jira task, driven from the command line.",
   "permissions": ["tabs", "tabGroups", "alarms", "storage"],
   "host_permissions": ["https://*.atlassian.net/*"],
   "background": {
-    "service_worker": "sync.js"
+    "service_worker": "sync.js",
+    "type": "module"
   }
 }

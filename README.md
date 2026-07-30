@@ -62,14 +62,26 @@ Paths, all overridable by environment variable:
 ```bash
 task-tab add ACME-1234 https://acme.atlassian.net/browse/ACME-1234
 task-tab add ACME-1234 http://localhost:3000        # same group, second tab
+task-tab --focus add ACME-1234 http://localhost:3000  # ...and jump to it
 task-tab collapse ACME-1234                         # fold it up
 task-tab close ACME-1234                            # close every tab in it
 task-tab site https://acme.atlassian.net            # point the sync at your Jira
 ```
 
-Adding a URL already in the group focuses that tab instead of opening a
-duplicate. `task-tab` is a deliberate silent no-op — it exits 0 without output
+Adding a URL already in the group is a no-op instead of opening a duplicate.
+`task-tab` is a deliberate silent no-op in general — it exits 0 without output
 when it cannot work, so a script may call it unconditionally.
+
+### Nothing steals your focus
+
+Tabs are arranged in the background. `open -g` keeps Chrome from coming to the
+front, new tabs are created inactive, and the control page — which Chrome does
+make active for the ~200 ms it exists — hands the selection back to the tab you
+were reading before closing itself. The service worker tracks that tab per
+window, ignoring control pages, so the answer is right even after several
+commands in a row.
+
+`--focus` opts out for the one call where you do want to be taken to the tab.
 
 ## The status prefix
 
@@ -95,8 +107,8 @@ letters of its name:
 | In dev / In progress | `DEV` | | | |
 | On review / In review | `REV` | | | |
 
-Adapting it to another workflow is one edit in `extension/statuses.js`; nothing
-else knows the status names.
+Adapting it to another workflow is one edit in `extension/lib/statuses.js`;
+nothing else knows the status names.
 
 `Closed` is just another prefix — the group stays open until `task-tab close`
 takes it down.
@@ -136,13 +148,14 @@ inconsistently in terminals.
 ## Development
 
 ```bash
-npm test        # node:test over the pure helpers in extension/statuses.js
+npm test        # node:test over everything under extension/lib
 ```
 
-`extension/statuses.js` is a classic script — loaded by `importScripts` in the
-service worker and by a `<script>` tag in the control page — with a `module.exports`
-tail so the tests can require it. There is no build step; edit a file and press
-*Reload* on the extension card in `chrome://extensions`.
+The extension is plain ES modules — `"type": "module"` on the service worker and
+`<script type="module">` on the control page — so there is no build step and no
+bundler: edit a file and press *Reload* on the extension card in
+`chrome://extensions`. Everything under `extension/lib/` is free of browser APIs
+and is what the tests import directly.
 
 Files:
 
@@ -150,10 +163,22 @@ Files:
 |---|---|
 | `bin/task-tab` | CLI: opens the control page with the requested action |
 | `bin/task-color` | CLI: assigns and remembers a task's colour |
+| `bin/lib/common.sh` | Shared by both CLIs and the installer: state dir, URL encoding |
 | `extension/control.js` | Performs one action per page load, then closes the tab |
-| `extension/sync.js` | Service worker: polls Jira, rewrites group titles |
-| `extension/statuses.js` | Status map, title format, title-ownership rule |
+| `extension/sync.js` | Service worker: schedules the sync and wires up the messages |
+| `extension/lib/statuses.js` | The status → prefix map, and nothing else |
+| `extension/lib/titles.js` | Title format, key extraction, title-ownership rule |
+| `extension/lib/plan.js` | Decides which titles to rewrite — pure, no browser APIs |
+| `extension/chrome/` | Thin wrappers over `chrome.*`: groups, focus, storage |
+| `extension/providers/jira.js` | The only file that knows Jira's API |
 | `install.sh` | Links the CLI, resolves the extension id, sets the Jira site |
+
+### Pointing it at another tracker
+
+`extension/providers/jira.js` is the whole coupling. A sibling exporting the same
+`fetchStatuses(site, keys) -> { key: statusName }` plus one import line in
+`sync.js` and the new host in `manifest.json` is the entire change; `lib/` and
+`chrome/` never learn about it.
 
 ## When tabs stop appearing
 
