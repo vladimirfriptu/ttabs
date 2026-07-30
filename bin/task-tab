@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Add a tab to a per-task Chrome tab group, or close the group.
+#
+#   task-tab add HRS-1234 https://example.com/issue
+#   task-tab close HRS-1234
+#   task-tab collapse HRS-1234
+#   task-tab site https://acme.atlassian.net
+#
+# Drives the "Task Tabs" Chrome extension by opening its control page — Chrome
+# accepts chrome-extension:// URLs from `open`, so no daemon is involved.
+#
+# Silent no-op when the extension id is unknown or Chrome is missing, so callers
+# can invoke it unconditionally.
+
+set -eu
+
+state_dir="${TASK_TABS_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/task-tabs}"
+
+# Resolved through the symlink `install.sh` puts in ~/.local/bin, so the sibling
+# script is found whether this runs from the repo or from PATH.
+self="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$0")"
+task_color="$(dirname "$self")/task-color"
+
+color_override=""
+if [ "${1:-}" = "--color" ]; then
+    color_override="${2:-}"
+    [ -n "$color_override" ] || { echo "usage: task-tab --color <name> <action> ..." >&2; exit 2; }
+    shift 2
+fi
+
+action="${1:-}"
+group="${2:-}"
+url="${3:-}"
+
+case "$action" in
+    add)
+        [ -n "$group" ] && [ -n "$url" ] || { echo "usage: task-tab add <group> <url>" >&2; exit 2; } ;;
+    close|collapse)
+        [ -n "$group" ] || { echo "usage: task-tab $action <group>" >&2; exit 2; } ;;
+    site)
+        [ -n "$group" ] || { echo "usage: task-tab site <https://your.atlassian.net>" >&2; exit 2; } ;;
+    *)
+        echo "usage: task-tab <add|close|collapse|site> <group|url> [url]" >&2; exit 2 ;;
+esac
+
+id_file="$state_dir/extension-id"
+[ -f "$id_file" ] || exit 0
+ext_id="$(tr -d '[:space:]' < "$id_file")"
+[ -n "$ext_id" ] || exit 0
+[ -d "/Applications/Google Chrome.app" ] || exit 0
+
+encode() {
+    python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+}
+
+if [ "$action" = "site" ]; then
+    control="chrome-extension://$ext_id/control.html?action=config&site=$(encode "$group")"
+    open -g -a "Google Chrome" "$control" >/dev/null 2>&1 || exit 0
+    exit 0
+fi
+
+control="chrome-extension://$ext_id/control.html?action=$action&group=$(encode "$group")"
+[ -n "$url" ] && control="$control&url=$(encode "$url")"
+
+# The colour is assigned by task-color, not by the extension, so the terminal
+# label and the browser group always agree on it.
+if [ "$action" = "add" ]; then
+    color=""
+    if [ -n "$color_override" ]; then
+        # Persist the override too, or a label reading task-color would keep
+        # showing the colour it picked on its own.
+        "$task_color" --set "$color_override" "$group" >/dev/null 2>&1 || true
+        color="$color_override"
+    else
+        color="$("$task_color" --chrome "$group" 2>/dev/null || true)"
+    fi
+    [ -n "$color" ] && control="$control&color=$(encode "$color")"
+fi
+
+open -g -a "Google Chrome" "$control" >/dev/null 2>&1 || exit 0
+
+# Closing the group ends the task's claim on its colour.
+[ "$action" = "close" ] && "$task_color" --release "$group" >/dev/null 2>&1
+exit 0

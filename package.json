@@ -1,0 +1,11 @@
+{
+  "name": "ttabs",
+  "version": "1.1.0",
+  "private": true,
+  "license": "MIT",
+  "author": "Volodymyr Friptu",
+  "description": "Group Chrome tabs by Jira task from the command line, with the task's status in the group title.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

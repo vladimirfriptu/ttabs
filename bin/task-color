@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Assign and recall a task's colour — the anchor that ties a terminal tab to its
+# Chrome tab group.
+#
+#   task-color HRS-1234            -> "purple 🟪"
+#   task-color --chrome HRS-1234   -> "purple"
+#   task-color --emoji  HRS-1234   -> "🟪"
+#   task-color --release HRS-1234  -> forget it, return the colour to the pool
+#
+# The colour is picked once, on first call, from whatever is not currently taken
+# by another task, and then remembered — every later caller gets the same answer.
+# That is what keeps an external label and the browser group in sync.
+#
+# Palette: the six Chrome tab-group colours that have a solid emoji square.
+# Chrome's pink and cyan are skipped — their squares (U+1FA77/U+1FA75) are
+# Unicode 15 and render inconsistently in terminals.
+
+set -eu
+
+# Ordered by how well they read in a tab row — grey is the last resort.
+NAMES=(blue green purple yellow red grey)
+EMOJI=(🟦 🟩 🟪 🟨 🟥 ⬜)
+
+state_dir="${TASK_TABS_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/task-tabs}"
+store="$state_dir/colors"
+
+emoji_for() {
+    local want="$1" i
+    for i in "${!NAMES[@]}"; do
+        [ "${NAMES[$i]}" = "$want" ] && { printf '%s' "${EMOJI[$i]}"; return; }
+    done
+    printf '%s' "${EMOJI[0]}"
+}
+
+# Deterministic fallback for when every colour is already in use.
+hash_pick() {
+    local key="$1" sum=0 i c
+    for (( i = 0; i < ${#key}; i++ )); do
+        c=$(printf '%d' "'${key:i:1}")
+        sum=$(( sum + c ))
+    done
+    printf '%s' "${NAMES[$(( sum % ${#NAMES[@]} ))]}"
+}
+
+assign() {
+    local key="$1"
+    local file="$store/$key"
+    [ -f "$file" ] && { tr -d '[:space:]' < "$file"; return; }
+
+    mkdir -p "$store"
+    local taken="" f
+    for f in "$store"/*; do
+        [ -f "$f" ] || continue
+        taken="$taken $(tr -d '[:space:]' < "$f")"
+    done
+
+    local pick="" name
+    for name in "${NAMES[@]}"; do
+        case " $taken " in
+            *" $name "*) ;;
+            *) pick="$name"; break ;;
+        esac
+    done
+    [ -n "$pick" ] || pick="$(hash_pick "$key")"
+
+    printf '%s\n' "$pick" > "$file"
+    printf '%s' "$pick"
+}
+
+mode="both"
+forced=""
+case "${1:-}" in
+    --chrome)  mode="chrome";  shift ;;
+    --emoji)   mode="emoji";   shift ;;
+    --release) mode="release"; shift ;;
+    --set)
+        mode="set"
+        forced="${2:-}"
+        [ -n "$forced" ] || { echo "usage: task-color --set <color> <key>" >&2; exit 2; }
+        case " ${NAMES[*]} " in
+            *" $forced "*) ;;
+            *) echo "task-color: unknown colour '$forced' (have: ${NAMES[*]})" >&2; exit 2 ;;
+        esac
+        shift 2 ;;
+    -*) echo "usage: task-color [--chrome|--emoji|--release|--set <color>] <key>" >&2; exit 2 ;;
+esac
+
+key="${1:-}"
+[ -n "$key" ] || { echo "usage: task-color [--chrome|--emoji|--release] <key>" >&2; exit 2; }
+
+if [ "$mode" = "release" ]; then
+    rm -f "$store/$key"
+    exit 0
+fi
+
+if [ "$mode" = "set" ]; then
+    mkdir -p "$store"
+    printf '%s\n' "$forced" > "$store/$key"
+    printf '%s %s\n' "$forced" "$(emoji_for "$forced")"
+    exit 0
+fi
+
+color="$(assign "$key")"
+case "$mode" in
+    chrome) printf '%s\n' "$color" ;;
+    emoji)  printf '%s\n' "$(emoji_for "$color")" ;;
+    both)   printf '%s %s\n' "$color" "$(emoji_for "$color")" ;;
+esac
