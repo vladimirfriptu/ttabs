@@ -12,6 +12,7 @@ set -eu
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ext_dir="$repo/extension"
+# shellcheck source=bin/lib/common.sh
 . "$repo/bin/lib/common.sh"
 
 bin_dir="${TASK_TABS_BIN:-$HOME/.local/bin}"

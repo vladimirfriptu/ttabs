@@ -23,6 +23,7 @@ set -eu
 # from PATH.
 self="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$0")"
 bin_dir="$(dirname "$self")"
+# shellcheck source=bin/lib/common.sh
 . "$bin_dir/lib/common.sh"
 
 task_color="$bin_dir/task-color"
@@ -50,7 +51,9 @@ url="${3:-}"
 
 case "$action" in
     add)
-        [ -n "$group" ] && [ -n "$url" ] || { echo "usage: task-tab add <group> <url>" >&2; exit 2; } ;;
+        if [ -z "$group" ] || [ -z "$url" ]; then
+            echo "usage: task-tab add <group> <url>" >&2; exit 2
+        fi ;;
     close|collapse)
         [ -n "$group" ] || { echo "usage: task-tab $action <group>" >&2; exit 2; } ;;
     site)

@@ -24,6 +24,7 @@ EMOJI=(🟦 🟩 🟪 🟨 🟥 ⬜)
 # Resolved through the symlink `install.sh` puts in ~/.local/bin, so the shared
 # library is found whether this runs from the repo or from PATH.
 self="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$0")"
+# shellcheck source=bin/lib/common.sh
 . "$(dirname "$self")/lib/common.sh"
 
 store="$state_dir/colors"
