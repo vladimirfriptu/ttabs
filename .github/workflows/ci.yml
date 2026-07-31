@@ -6,8 +6,10 @@ on:
   pull_request:
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
+  # The CLI is macOS-only by design — `open -a "Google Chrome"`, /Applications,
+  # BSD `stat` — so the tests that drive it have to run there to mean anything.
+  test:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -17,6 +19,12 @@ jobs:
 
       - run: npm test
 
-      # shellcheck ships with the ubuntu runner image. -x makes it follow the
-      # sourced bin/lib/common.sh, which is where state_dir comes from.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # shellcheck ships with the ubuntu runner image, and reads the scripts
+      # without running them. -x makes it follow the sourced bin/lib/common.sh,
+      # which is where state_dir comes from.
       - run: shellcheck -x bin/task-tab bin/task-color bin/lib/common.sh install.sh
