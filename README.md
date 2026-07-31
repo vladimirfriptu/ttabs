@@ -137,8 +137,14 @@ task-color --release ACME-1234  # return it to the pool
 The colour is picked on first call from whatever no other live task holds, then
 stored in `<state>/colors/<key>` — that file is both the memory and the "taken"
 list. `task-tab close` releases it, so finished tasks give their colour back.
-When all six are in use, further tasks fall back to a hash of the key and colours
-start repeating.
+
+That is not the only way a task ends, though: close the group by hand, delete the
+worktree, restart the machine, and the reservation would be held for good. The
+CLI cannot ask Chrome which groups still exist, so instead every read stamps the
+reservation as live, and a task that finds nothing free takes over the colour
+nobody has asked about in longest — the one most likely to be finished. Colours
+therefore repeat only while you genuinely have more than six tasks in flight, and
+the store never grows past the palette.
 
 The palette is the six Chrome tab-group colours with a solid emoji square: blue,
 green, purple, yellow, red, grey — in that order, so grey is the last resort.
@@ -148,7 +154,7 @@ inconsistently in terminals.
 ## Development
 
 ```bash
-npm test        # node:test over everything under extension/lib
+npm test        # node:test over extension/lib, plus task-color end to end
 ```
 
 The extension is plain ES modules — `"type": "module"` on the service worker and

@@ -37,20 +37,33 @@ emoji_for() {
     printf '%s' "${EMOJI[0]}"
 }
 
-# Deterministic fallback for when every colour is already in use.
-hash_pick() {
-    local key="$1" sum=0 i c
-    for (( i = 0; i < ${#key}; i++ )); do
-        c=$(printf '%d' "'${key:i:1}")
-        sum=$(( sum + c ))
+# `task-tab close` is the only thing that ever releases a colour, so a task that
+# ended some other way — group closed by hand, worktree deleted, machine
+# restarted — would hold its reservation for good and the palette would slowly
+# run dry. Instead of guessing whether a task is over (the CLI cannot ask Chrome
+# what still exists), every read stamps the reservation as live, and a new task
+# with nothing free takes over the one nobody has asked about in longest.
+stalest_file() {
+    local oldest="" oldest_at="" f at
+    for f in "$store"/*; do
+        [ -f "$f" ] || continue
+        at="$(stat -f '%m' "$f")"
+        if [ -z "$oldest_at" ] || [ "$at" -lt "$oldest_at" ]; then
+            oldest="$f"
+            oldest_at="$at"
+        fi
     done
-    printf '%s' "${NAMES[$(( sum % ${#NAMES[@]} ))]}"
+    printf '%s' "$oldest"
 }
 
 assign() {
     local key="$1"
     local file="$store/$key"
-    [ -f "$file" ] && { tr -d '[:space:]' < "$file"; return; }
+    if [ -f "$file" ]; then
+        touch "$file"
+        tr -d '[:space:]' < "$file"
+        return
+    fi
 
     mkdir -p "$store"
     local taken="" f
@@ -66,7 +79,13 @@ assign() {
             *) pick="$name"; break ;;
         esac
     done
-    [ -n "$pick" ] || pick="$(hash_pick "$key")"
+
+    if [ -z "$pick" ]; then
+        local stalest
+        stalest="$(stalest_file)"
+        pick="$(tr -d '[:space:]' < "$stalest")"
+        rm -f "$stalest"
+    fi
 
     printf '%s\n' "$pick" > "$file"
     printf '%s' "$pick"
