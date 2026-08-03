@@ -121,6 +121,15 @@ case is what lets a fallback prefix for an unmapped status keep updating.
 Anything else (`[1] ACME-261`, `⚠️ ACME-261`) is yours, and the sync leaves that
 group alone for good. Rename it back to a bare key to hand it over again.
 
+**Keep the key in the title.** That is the one rule renaming has to respect: the
+key is how every command finds the group, and decoration around it — on either
+side, in any amount — is ignored. `[2] ACME-261`, `ACME-261 [2]`,
+`ACME-261 (waiting on design)` and `ACME-261-empty-state-fixes` all still belong
+to `ACME-261`, so `task-tab add`, `close` and `collapse` keep reaching them. Drop
+the key (`design work`) and the group becomes invisible to the CLI: the next
+`task-tab add` will build a second group beside it rather than adopt it. When a
+title carries two keys, the leftmost one wins.
+
 ## The colour anchor
 
 If your terminal multiplexer labels its own tabs per task, `task-color` gives

@@ -5,7 +5,11 @@ import { KNOWN_PREFIXES, abbreviate } from './statuses.js';
 
 const SEPARATOR = '|';
 
-const KEY_PATTERN = /([A-Z][A-Z0-9]*-\d+)$/;
+// Deliberately unanchored: a group the user renamed to "ACME-261 [2]" is still
+// that task's group, and anchoring the key to the end of the title made such a
+// group invisible — `task-tab add` then built a second one beside it. Whatever
+// the user writes around the key is decoration; the leftmost key is the task.
+const KEY_PATTERN = /([A-Z][A-Z0-9]*-\d+)/;
 
 export const keyFromTitle = (title) => title.match(KEY_PATTERN)?.[1] ?? null;
 
