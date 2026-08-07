@@ -5,10 +5,11 @@
 // but never focused — a second monitor, the normal manual-QA layout — still
 // notices the session ending instead of the panel going zombie forever.
 
-import { IDLE_POLL_MS, ACTIVE_POLL_MS } from './config.js';
-import { readState, setPassed, finish } from './bridge.js';
+import { IDLE_POLL_MS, ACTIVE_POLL_MS, COMMENT_DEBOUNCE_MS } from './config.js';
+import { readState, setPassed, setComment, finish } from './bridge.js';
 import { createPanel } from './panel.js';
 import { normalizeState, applyPassed, finishWarning } from '../lib/qa-cases.js';
+import { createPendingSends } from '../lib/qa-pending.js';
 
 export const startSessionWatch = () => {
   let timer = null;
@@ -16,6 +17,20 @@ export const startSessionWatch = () => {
   let panel = null;
   let state = null;
   let finishing = false;
+
+  // The pending module deliberately does not catch, so the failure has to be
+  // absorbed here — an unhandled rejection in a timer reaches nobody.
+  const sendComment = (id, text) =>
+    setComment(id, text).catch((e) => panel?.showError(id, `not saved: ${e.message}`));
+
+  const comments = createPendingSends(sendComment, COMMENT_DEBOUNCE_MS);
+
+  const onComment = (id, text) => comments.queue(id, text);
+
+  const onCommentCommit = (id, text) => {
+    comments.queue(id, text);
+    comments.sendNow(id);
+  };
 
   const stopIdlePolling = () => {
     if (timer === null) return;
@@ -40,6 +55,7 @@ export const startSessionWatch = () => {
   };
 
   const close = () => {
+    comments.clear();
     panel?.destroy();
     panel = null;
     state = null;
@@ -66,6 +82,8 @@ export const startSessionWatch = () => {
     if (warning && !window.confirm(warning)) return;
 
     finishing = true;
+    await comments.flush();
+
     try {
       await finish('');
     } catch (e) {
@@ -83,7 +101,7 @@ export const startSessionWatch = () => {
 
   const open = (next) => {
     state = next;
-    if (!panel) panel = createPanel({ onToggle, onFinish });
+    if (!panel) panel = createPanel({ onToggle, onComment, onCommentCommit, onFinish });
     panel.render(state);
   };
 
