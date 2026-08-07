@@ -27,7 +27,7 @@ const details = (item) => {
   return box;
 };
 
-const caseRow = (item, onToggle, expandedIds, openComments, commentText, editedIds, onComment, onCommentCommit) => {
+const caseRow = (item, onToggle, collapsedIds, openComments, commentText, editedIds, onComment, onCommentCommit) => {
   const wrapper = el('div', `case ${item.status}`);
   wrapper.dataset.id = item.id;
 
@@ -40,11 +40,11 @@ const caseRow = (item, onToggle, expandedIds, openComments, commentText, editedI
 
   const title = el('button', 'title', item.title);
   const expanded = details(item);
-  expanded.hidden = !expandedIds.has(item.id);
+  expanded.hidden = collapsedIds.has(item.id);
   title.addEventListener('click', () => {
     expanded.hidden = !expanded.hidden;
-    if (expanded.hidden) expandedIds.delete(item.id);
-    else expandedIds.add(item.id);
+    if (expanded.hidden) collapsedIds.add(item.id);
+    else collapsedIds.delete(item.id);
   });
 
   row.append(checkbox, title);
@@ -128,10 +128,12 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
   // to see the page underneath.
   let collapsed = false;
 
-  // Same reasoning for which cases are expanded: the keep-alive poll rebuilds
-  // every row on a timer, and a developer mid-way through reading a case's
-  // steps must not have them slam shut underneath them every 15 seconds.
-  const expandedIds = new Set();
+  // Steps and expected result are shown by default — they are what the
+  // developer is here to follow — so what has to be remembered across a
+  // re-render is which cases were folded away, not which were opened. Either
+  // way the keep-alive poll rebuilds every row on a timer and must not undo
+  // the developer's choice underneath them every 15 seconds.
+  const collapsedIds = new Set();
 
   const openComments = new Set();
   const commentText = new Map();
@@ -176,8 +178,8 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
       count.textContent = `${passed}/${state.cases.length}`;
 
       const knownIds = new Set(state.cases.map((c) => c.id));
-      for (const id of expandedIds) {
-        if (!knownIds.has(id)) expandedIds.delete(id);
+      for (const id of collapsedIds) {
+        if (!knownIds.has(id)) collapsedIds.delete(id);
       }
       for (const id of openComments) {
         if (!knownIds.has(id)) openComments.delete(id);
@@ -204,7 +206,7 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
       for (const group of groupByArea(state.cases)) {
         body.append(el('div', 'area', group.area));
         for (const item of group.cases) {
-          body.append(caseRow(item, onToggle, expandedIds, openComments, commentText, editedIds, onComment, onCommentCommit));
+          body.append(caseRow(item, onToggle, collapsedIds, openComments, commentText, editedIds, onComment, onCommentCommit));
         }
       }
       if (state.discrepancies.length > 0) body.append(discrepancySection(state.discrepancies));
