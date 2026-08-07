@@ -14,6 +14,7 @@ export const startSessionWatch = () => {
   let timer = null;
   let panel = null;
   let state = null;
+  let finishing = false;
 
   const stopIdlePolling = () => {
     if (timer === null) return;
@@ -30,6 +31,7 @@ export const startSessionWatch = () => {
     panel?.destroy();
     panel = null;
     state = null;
+    finishing = false;
     startIdlePolling();
   };
 
@@ -45,15 +47,19 @@ export const startSessionWatch = () => {
   };
 
   const onFinish = async () => {
+    if (finishing) return;
+
     const warning = finishWarning(state.cases);
     if (warning && !window.confirm(warning)) return;
 
+    finishing = true;
     try {
       await finish('');
     } catch (e) {
+      finishing = false;
       // The panel stays up: the CLI on the other end is still blocked, so
       // pretending the session ended would hide that from the developer.
-      panel?.showError(state.cases[0]?.id, `could not finish: ${e.message}`);
+      panel?.showError(state?.cases?.[0]?.id, `could not finish: ${e.message}`);
       return;
     }
 
