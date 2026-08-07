@@ -10,11 +10,13 @@ const send = async (method, path, body) => {
   return reply;
 };
 
-// A server that is not running and a server saying "no session" mean the same
-// thing to the panel, so both arrive here as null rather than as an error.
+// A definitive "no session" — the server itself answering not-ok, 404
+// included — resolves null, same as the panel has always treated it. A
+// transport failure (no reply, or the service worker's own { error }) is not
+// that: it rejects, so a caller can tell a hiccup apart from a real close.
 export const readState = async () => {
-  const reply = await send('GET', '/api/qa/state').catch(() => null);
-  if (!reply || !reply.ok) return null;
+  const reply = await send('GET', '/api/qa/state');
+  if (!reply.ok) return null;
   return reply.data;
 };
 

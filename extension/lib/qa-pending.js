@@ -7,13 +7,22 @@
 export const createPendingSends = (send, delayMs) => {
   const queued = new Map();
 
+  // A send that flush() itself did not start — e.g. one sendNow() fired from
+  // a blur handler right before Done is clicked — must still be waited on,
+  // or the finish request can race it to the server.
+  const inflight = new Set();
+
   const deliver = (id) => {
     const entry = queued.get(id);
     if (!entry) return Promise.resolve();
 
     clearTimeout(entry.timer);
     queued.delete(id);
-    return Promise.resolve(send(id, entry.text));
+    const result = Promise.resolve(send(id, entry.text));
+    inflight.add(result);
+    const forget = () => inflight.delete(result);
+    result.then(forget, forget);
+    return result;
   };
 
   return {
@@ -26,7 +35,8 @@ export const createPendingSends = (send, delayMs) => {
     sendNow: deliver,
 
     flush() {
-      return Promise.all([...queued.keys()].map(deliver)).then(() => undefined);
+      const started = [...queued.keys()].map(deliver);
+      return Promise.all([...started, ...inflight]).then(() => undefined);
     },
 
     clear() {

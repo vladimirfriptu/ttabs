@@ -29,7 +29,7 @@ export const startSessionWatch = () => {
 
   const onCommentCommit = (id, text) => {
     comments.queue(id, text);
-    comments.sendNow(id);
+    return comments.sendNow(id);
   };
 
   const stopIdlePolling = () => {
@@ -106,7 +106,17 @@ export const startSessionWatch = () => {
   };
 
   const poll = async () => {
-    const next = normalizeState(await readState());
+    let raw;
+    try {
+      raw = await readState();
+    } catch {
+      // A transport hiccup, not a definitive answer — the server may be
+      // restarting or the service worker asleep. Leave the panel and its
+      // typed text exactly as they are; the next tick tries again.
+      return;
+    }
+
+    const next = normalizeState(raw);
 
     if (!next) {
       if (panel) close();

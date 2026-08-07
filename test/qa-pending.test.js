@@ -131,6 +131,35 @@ test('flush waits for the sends it started', withFakeTimers(async () => {
   assert.deepEqual(settled, ['TC-1']);
 }));
 
+test('flush awaits a send already in flight from an earlier sendNow', withFakeTimers(async () => {
+  const settled = [];
+  let release;
+  const blocked = new Promise((resolve) => { release = resolve; });
+  const send = (id) => blocked.then(() => settled.push(id));
+
+  const pending = createPendingSends(send, 1000);
+  pending.queue('TC-1', 'first');
+
+  const sent = pending.sendNow('TC-1');
+  assert.deepEqual(pending.pending(), []);
+
+  const flushed = pending.flush();
+  assert.deepEqual(settled, []);
+
+  release();
+  await sent;
+  await flushed;
+  assert.deepEqual(settled, ['TC-1']);
+}));
+
+test('flush with nothing queued and nothing in flight resolves without sending', withFakeTimers(async () => {
+  const { calls, send } = recorder();
+  const pending = createPendingSends(send, 1000);
+
+  await pending.flush();
+  assert.deepEqual(calls, []);
+}));
+
 test('clear cancels everything and sends nothing', withFakeTimers(async () => {
   const { calls, send } = recorder();
   const pending = createPendingSends(send, 1000);

@@ -27,7 +27,7 @@ const details = (item) => {
   return box;
 };
 
-const caseRow = (item, onToggle, expandedIds, openComments, commentText, onComment, onCommentCommit) => {
+const caseRow = (item, onToggle, expandedIds, openComments, commentText, editedIds, onComment, onCommentCommit) => {
   const wrapper = el('div', `case ${item.status}`);
   wrapper.dataset.id = item.id;
 
@@ -74,11 +74,18 @@ const caseRow = (item, onToggle, expandedIds, openComments, commentText, onComme
 
   note.addEventListener('input', () => {
     commentText.set(item.id, note.value);
+    editedIds.add(item.id);
     markWritten();
     onComment(item.id, note.value);
   });
 
-  note.addEventListener('blur', () => onCommentCommit(item.id, note.value));
+  // A fresh panel always renders an empty field for a case that already has a
+  // comment on the server, because GET /api/qa/state never echoes one back.
+  // Committing on every blur would send that emptiness and erase the saved
+  // note, so only a field the developer actually touched here is committed.
+  note.addEventListener('blur', () => {
+    if (editedIds.has(item.id)) onCommentCommit(item.id, note.value);
+  });
 
   row.append(comment);
 
@@ -104,7 +111,9 @@ const discrepancySection = (discrepancies) => {
 export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) => {
   const host = el('div');
   host.id = HOST_ID;
-  const root = host.attachShadow({ mode: 'open' });
+  // Closed so a script elsewhere on the page cannot reach shadowRoot to read
+  // notes or forge input/click events; the panel keeps its own reference below.
+  const root = host.attachShadow({ mode: 'closed' });
 
   // Collapsed state is UI-only and lives here, not in session.js: a poll can
   // re-render at any time and must not undo a collapse the developer just did
@@ -118,6 +127,7 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
 
   const openComments = new Set();
   const commentText = new Map();
+  const editedIds = new Set();
 
   const style = el('style', null, PANEL_CSS);
   const panel = el('div', 'panel');
@@ -165,6 +175,9 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
       for (const id of commentText.keys()) {
         if (!knownIds.has(id)) commentText.delete(id);
       }
+      for (const id of editedIds) {
+        if (!knownIds.has(id)) editedIds.delete(id);
+      }
 
       const scrollTop = body.scrollTop;
 
@@ -181,7 +194,7 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
       for (const group of groupByArea(state.cases)) {
         body.append(el('div', 'area', group.area));
         for (const item of group.cases) {
-          body.append(caseRow(item, onToggle, expandedIds, openComments, commentText, onComment, onCommentCommit));
+          body.append(caseRow(item, onToggle, expandedIds, openComments, commentText, editedIds, onComment, onCommentCommit));
         }
       }
       if (state.discrepancies.length > 0) body.append(discrepancySection(state.discrepancies));
