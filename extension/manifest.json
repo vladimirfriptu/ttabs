@@ -4,7 +4,11 @@
   "version": "1.3",
   "description": "Groups browser tabs by Jira task, driven from the command line.",
   "permissions": ["tabs", "tabGroups", "alarms", "storage"],
-  "host_permissions": ["https://*.atlassian.net/*"],
+  "host_permissions": [
+    "https://*.atlassian.net/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
   "background": {
     "service_worker": "sync.js",
     "type": "module"

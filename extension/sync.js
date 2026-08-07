@@ -6,6 +6,8 @@
 
 import { trackedGroups } from './chrome/groups.js';
 import { rememberActiveTab, restoreFocus } from './chrome/focus.js';
+import { QA_MESSAGE } from './qa/config.js';
+import { call } from './qa/client.js';
 import { readSite, readTitles, writeTitles } from './chrome/store.js';
 import { planUpdates } from './lib/plan.js';
 import { fetchStatuses } from './providers/jira.js';
@@ -69,6 +71,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     restoreFocus(message.windowId)
       .catch((e) => console.warn('[task-tabs]', e))
       .finally(() => sendResponse(true));
+    return true;
+  }
+
+  if (message?.type === QA_MESSAGE) {
+    // No server running is the normal state, not an error worth logging — the
+    // content script polls for one and reads a failure as "no session".
+    call(message)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ error: String(e?.message ?? e) }));
     return true;
   }
 
