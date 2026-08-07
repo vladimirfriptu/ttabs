@@ -32,6 +32,16 @@ export const PANEL_CSS = `
   .task { font-weight: 600; }
   .count { color: #777; margin-left: auto; }
 
+  .collapse-toggle {
+    background: none;
+    border: 0;
+    padding: 0 2px;
+    font: inherit;
+    line-height: 1;
+    color: #777;
+    cursor: pointer;
+  }
+
   .body { overflow-y: auto; padding: 4px 0; }
 
   .area {

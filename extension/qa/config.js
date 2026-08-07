@@ -12,3 +12,9 @@ export const QA_MESSAGE = 'qa-request';
 // How often to ask whether a session has started. Only ticks while no session
 // is open — once the panel is up, refreshes are driven by what the user does.
 export const IDLE_POLL_MS = 5000;
+
+// Keep-alive poll while a panel is open, so a visible-but-unfocused tab (a
+// second monitor, the normal manual-QA layout) still notices a finished or
+// killed session instead of going zombie. Slower than IDLE_POLL_MS on
+// purpose — every localhost tab with a panel open holds one of these.
+export const ACTIVE_POLL_MS = 15000;

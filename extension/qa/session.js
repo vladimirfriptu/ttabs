@@ -1,17 +1,18 @@
 // Idle → a session appears → the panel is up → the session ends → idle again.
 //
-// The poll only ticks while idle. Once a panel is up the server is asked again
-// only after something happened — a save, or the tab coming back into view —
-// so an open session does not keep a request going every few seconds in every
-// local tab the developer has open.
+// Two interval timers, never both live: a fast one while idle, a slow
+// keep-alive once a panel is up. The slow one exists so a tab that is visible
+// but never focused — a second monitor, the normal manual-QA layout — still
+// notices the session ending instead of the panel going zombie forever.
 
-import { IDLE_POLL_MS } from './config.js';
+import { IDLE_POLL_MS, ACTIVE_POLL_MS } from './config.js';
 import { readState, setPassed, finish } from './bridge.js';
 import { createPanel } from './panel.js';
 import { normalizeState, applyPassed, finishWarning } from '../lib/qa-cases.js';
 
 export const startSessionWatch = () => {
   let timer = null;
+  let activeTimer = null;
   let panel = null;
   let state = null;
   let finishing = false;
@@ -27,11 +28,23 @@ export const startSessionWatch = () => {
     timer = setInterval(() => { poll(); }, IDLE_POLL_MS);
   };
 
+  const stopActivePolling = () => {
+    if (activeTimer === null) return;
+    clearInterval(activeTimer);
+    activeTimer = null;
+  };
+
+  const startActivePolling = () => {
+    if (activeTimer !== null) return;
+    activeTimer = setInterval(() => { poll(); }, ACTIVE_POLL_MS);
+  };
+
   const close = () => {
     panel?.destroy();
     panel = null;
     state = null;
     finishing = false;
+    stopActivePolling();
     startIdlePolling();
   };
 
@@ -64,7 +77,7 @@ export const startSessionWatch = () => {
     }
 
     panel?.showEnded();
-    stopIdlePolling();
+    stopActivePolling();
     setTimeout(close, 2000);
   };
 
@@ -84,6 +97,7 @@ export const startSessionWatch = () => {
 
     stopIdlePolling();
     open(next);
+    startActivePolling();
   };
 
   document.addEventListener('visibilitychange', () => {

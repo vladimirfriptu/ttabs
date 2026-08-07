@@ -72,17 +72,36 @@ export const createPanel = ({ onToggle, onFinish }) => {
   host.id = HOST_ID;
   const root = host.attachShadow({ mode: 'open' });
 
+  // Collapsed state is UI-only and lives here, not in session.js: a poll can
+  // re-render at any time and must not undo a collapse the developer just did
+  // to see the page underneath.
+  let collapsed = false;
+
   const style = el('style', null, PANEL_CSS);
   const panel = el('div', 'panel');
   const head = el('div', 'head');
   const task = el('span', 'task');
   const count = el('span', 'count');
+  const collapseToggle = el('button', 'collapse-toggle', '–');
+  collapseToggle.type = 'button';
   const body = el('div', 'body');
   const foot = el('div', 'foot');
   const done = el('button', 'done', 'Done');
 
+  const applyCollapsed = () => {
+    body.hidden = collapsed;
+    foot.hidden = collapsed;
+    collapseToggle.textContent = collapsed ? '▸' : '–';
+    collapseToggle.setAttribute('aria-label', collapsed ? 'expand' : 'collapse');
+  };
+
+  collapseToggle.addEventListener('click', () => {
+    collapsed = !collapsed;
+    applyCollapsed();
+  });
+
   done.addEventListener('click', onFinish);
-  head.append(task, count);
+  head.append(task, count, collapseToggle);
   foot.append(done);
   panel.append(head, body, foot);
   root.append(style, panel);
@@ -102,6 +121,7 @@ export const createPanel = ({ onToggle, onFinish }) => {
       if (state.discrepancies.length > 0) body.append(discrepancySection(state.discrepancies));
 
       foot.hidden = false;
+      applyCollapsed();
     },
 
     showError(id, message) {
