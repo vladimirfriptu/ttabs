@@ -18,3 +18,7 @@ export const IDLE_POLL_MS = 5000;
 // killed session instead of going zombie. Slower than IDLE_POLL_MS on
 // purpose — every localhost tab with a panel open holds one of these.
 export const ACTIVE_POLL_MS = 15000;
+
+// Long enough that a sentence is one request rather than forty, short enough
+// that the text is on the server before the developer moves on.
+export const COMMENT_DEBOUNCE_MS = 1000;

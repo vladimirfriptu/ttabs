@@ -23,6 +23,11 @@ export const setPassed = async (id, passed) => {
   if (!reply.ok) throw new Error(`the server answered ${reply.status}`);
 };
 
+export const setComment = async (id, comment) => {
+  const reply = await send('POST', `/api/qa/case/${encodeURIComponent(id)}`, { comment });
+  if (!reply.ok) throw new Error(`the server answered ${reply.status}`);
+};
+
 export const finish = async (note) => {
   const reply = await send('POST', '/api/qa/finish', { note });
   if (!reply.ok) throw new Error(`the server answered ${reply.status}`);
