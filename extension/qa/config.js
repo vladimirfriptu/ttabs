@@ -22,3 +22,8 @@ export const ACTIVE_POLL_MS = 15000;
 // Long enough that a sentence is one request rather than forty, short enough
 // that the text is on the server before the developer moves on.
 export const COMMENT_DEBOUNCE_MS = 1000;
+
+// Consecutive failed polls tolerated before a panel is closed as dead. Paired
+// with ACTIVE_POLL_MS this gives a killed server roughly half a minute to
+// come back — enough to survive a restart — before the panel gives up.
+export const MAX_POLL_FAILURES = 2;

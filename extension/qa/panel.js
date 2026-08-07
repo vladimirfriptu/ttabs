@@ -139,6 +139,8 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
   const body = el('div', 'body');
   const foot = el('div', 'foot');
   const done = el('button', 'done', 'Done');
+  const finishError = el('div', 'error finish-error');
+  finishError.hidden = true;
 
   const applyCollapsed = () => {
     body.hidden = collapsed;
@@ -154,7 +156,7 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
 
   done.addEventListener('click', onFinish);
   head.append(task, count, collapseToggle);
-  foot.append(done);
+  foot.append(finishError, done);
   panel.append(head, body, foot);
   root.append(style, panel);
   document.documentElement.append(host);
@@ -218,6 +220,23 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
       const existing = row.querySelector('.error');
       if (existing) existing.remove();
       row.append(el('div', 'error', message));
+    },
+
+    // A finish failure has no single row to attach to — cases: [] is a valid
+    // session — so it goes beside Done instead. Expanding on error rather than
+    // leaving it silently behind a collapsed panel.
+    showFinishError(message) {
+      finishError.textContent = message;
+      finishError.hidden = false;
+      if (collapsed) {
+        collapsed = false;
+        applyCollapsed();
+      }
+    },
+
+    clearFinishError() {
+      finishError.hidden = true;
+      finishError.textContent = '';
     },
 
     showEnded() {

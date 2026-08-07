@@ -4,8 +4,12 @@
 // keep-alive once a panel is up. The slow one exists so a tab that is visible
 // but never focused — a second monitor, the normal manual-QA layout — still
 // notices the session ending instead of the panel going zombie forever.
+//
+// "The session ended" and "the server process died" arrive the same way — a
+// failed poll — so a panel only closes after MAX_POLL_FAILURES of those in a
+// row, giving a restart roughly a keep-alive interval's worth of slack.
 
-import { IDLE_POLL_MS, ACTIVE_POLL_MS, COMMENT_DEBOUNCE_MS } from './config.js';
+import { IDLE_POLL_MS, ACTIVE_POLL_MS, COMMENT_DEBOUNCE_MS, MAX_POLL_FAILURES } from './config.js';
 import { readState, setPassed, setComment, finish } from './bridge.js';
 import { createPanel } from './panel.js';
 import { normalizeState, applyPassed, finishWarning } from '../lib/qa-cases.js';
@@ -17,6 +21,10 @@ export const startSessionWatch = () => {
   let panel = null;
   let state = null;
   let finishing = false;
+
+  // Only counted while a panel is up: at idle with no server every poll fails
+  // forever, and the count would just grow without meaning anything.
+  let failures = 0;
 
   // The pending module deliberately does not catch, so the failure has to be
   // absorbed here — an unhandled rejection in a timer reaches nobody.
@@ -60,15 +68,21 @@ export const startSessionWatch = () => {
     panel = null;
     state = null;
     finishing = false;
+    failures = 0;
     stopActivePolling();
     startIdlePolling();
   };
 
   const onToggle = async (id, passed) => {
+    const previous = state;
     state = applyPassed(state, id, passed);
     try {
       await setPassed(id, passed);
     } catch (e) {
+      // Revert the optimistic flip before re-rendering, or onFinish's warning
+      // would count a case the server never actually recorded as passed.
+      state = previous;
+      panel?.render(state);
       panel?.showError(id, `not saved: ${e.message}`);
       return;
     }
@@ -82,6 +96,7 @@ export const startSessionWatch = () => {
     if (warning && !window.confirm(warning)) return;
 
     finishing = true;
+    panel?.clearFinishError();
 
     try {
       await comments.flush();
@@ -90,7 +105,8 @@ export const startSessionWatch = () => {
       finishing = false;
       // The panel stays up: the CLI on the other end is still blocked, so
       // pretending the session ended would hide that from the developer.
-      panel?.showError(state?.cases?.[0]?.id, `could not finish: ${e.message}`);
+      // No single row fits — cases: [] is valid — so this goes in the foot.
+      panel?.showFinishError(`could not finish: ${e.message}`);
       return;
     }
 
@@ -110,18 +126,30 @@ export const startSessionWatch = () => {
     try {
       raw = await readState();
     } catch {
-      // A transport hiccup, not a definitive answer — the server may be
-      // restarting or the service worker asleep. Leave the panel and its
-      // typed text exactly as they are; the next tick tries again.
+      // Not a definitive answer on its own — a lone hiccup is the server
+      // restarting or the service worker asleep, and the panel's typed text
+      // must survive that. But the same rejection is also what "the server
+      // process is gone" looks like, so a run of them, while a panel is up,
+      // is read as the session having ended.
+      if (panel) {
+        failures += 1;
+        if (failures >= MAX_POLL_FAILURES) close();
+      }
       return;
     }
 
+    failures = 0;
     const next = normalizeState(raw);
 
     if (!next) {
       if (panel) close();
       return;
     }
+
+    // A finish already succeeded and the "session ended" notice is showing;
+    // a poll landing in that two-second grace window must not repaint over
+    // it with a live-looking checklist.
+    if (finishing) return;
 
     stopIdlePolling();
     open(next);

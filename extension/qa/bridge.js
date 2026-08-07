@@ -10,13 +10,15 @@ const send = async (method, path, body) => {
   return reply;
 };
 
-// A definitive "no session" — the server itself answering not-ok, 404
-// included — resolves null, same as the panel has always treated it. A
-// transport failure (no reply, or the service worker's own { error }) is not
-// that: it rejects, so a caller can tell a hiccup apart from a real close.
+// A definitive "no session" — 404, specifically — resolves null, same as the
+// panel has always treated it. Anything else that isn't a clean 200 (no
+// reply, the service worker's own { error }, or a non-404 error status such
+// as a transient 500) is not that definitive: it rejects, so a caller can
+// tell a real close apart from a hiccup that deserves another try.
 export const readState = async () => {
   const reply = await send('GET', '/api/qa/state');
-  if (!reply.ok) return null;
+  if (reply.status === 404) return null;
+  if (!reply.ok) throw new Error(`the server answered ${reply.status}`);
   return reply.data;
 };
 

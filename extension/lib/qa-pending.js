@@ -12,15 +12,27 @@ export const createPendingSends = (send, delayMs) => {
   // or the finish request can race it to the server.
   const inflight = new Set();
 
+  // The tail of the chain per case id, so a second send for the same case
+  // queues behind the one already on the wire instead of racing it — a
+  // slower first request could otherwise land after a faster second one and
+  // leave the server holding stale text. Different ids never share a chain.
+  const chains = new Map();
+
   const deliver = (id) => {
     const entry = queued.get(id);
     if (!entry) return Promise.resolve();
 
     clearTimeout(entry.timer);
     queued.delete(id);
-    const result = Promise.resolve(send(id, entry.text));
+    const prior = chains.get(id);
+    const runThis = () => send(id, entry.text);
+    const result = prior ? prior.then(runThis, runThis) : Promise.resolve(runThis());
+    chains.set(id, result);
     inflight.add(result);
-    const forget = () => inflight.delete(result);
+    const forget = () => {
+      inflight.delete(result);
+      if (chains.get(id) === result) chains.delete(id);
+    };
     result.then(forget, forget);
     return result;
   };

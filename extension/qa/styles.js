@@ -129,6 +129,7 @@ export const PANEL_CSS = `
   .discrepancy .meta { color: #666; font-size: 11px; }
 
   .foot { padding: 8px 10px; border-top: 1px solid #e6e6e6; }
+  .finish-error { margin: 0 0 6px; }
 
   .done {
     width: 100%;

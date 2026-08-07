@@ -76,7 +76,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === QA_MESSAGE) {
     // No server running is the normal state, not an error worth logging — the
-    // content script polls for one and reads a failure as "no session".
+    // content script polls for one and tells a dead server (fetch itself
+    // fails, landing here) apart from a real "no session" (a clean 404).
     call(message)
       .then(sendResponse)
       .catch((e) => sendResponse({ error: String(e?.message ?? e) }));
