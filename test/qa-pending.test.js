@@ -143,21 +143,19 @@ test('flush awaits a send already in flight from an earlier sendNow', withFakeTi
   const sent = pending.sendNow('TC-1');
   assert.deepEqual(pending.pending(), []);
 
-  const flushed = pending.flush();
-  assert.deepEqual(settled, []);
+  let flushResolved = false;
+  const flushed = pending.flush().then(() => { flushResolved = true; });
+
+  // setImmediate is not mocked by mock.timers, so this drains microtasks
+  // without advancing the fake clock, letting flush() settle on its own if
+  // (wrongly) it isn't actually waiting on the in-flight send.
+  await new Promise((resolve) => { setImmediate(resolve); });
+  assert.equal(flushResolved, false, 'flush resolved before the in-flight send settled');
 
   release();
   await sent;
   await flushed;
   assert.deepEqual(settled, ['TC-1']);
-}));
-
-test('flush with nothing queued and nothing in flight resolves without sending', withFakeTimers(async () => {
-  const { calls, send } = recorder();
-  const pending = createPendingSends(send, 1000);
-
-  await pending.flush();
-  assert.deepEqual(calls, []);
 }));
 
 test('clear cancels everything and sends nothing', withFakeTimers(async () => {

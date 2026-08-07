@@ -82,9 +82,9 @@ export const startSessionWatch = () => {
     if (warning && !window.confirm(warning)) return;
 
     finishing = true;
-    await comments.flush();
 
     try {
+      await comments.flush();
       await finish('');
     } catch (e) {
       finishing = false;
