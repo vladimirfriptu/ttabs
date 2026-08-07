@@ -36,17 +36,18 @@ It expects that server to answer three endpoints:
 | Request | Answer |
 | --- | --- |
 | `GET /api/qa/state` | `200` with `{ task, cases, discrepancies }`, or `404` when no session is running |
-| `POST /api/qa/case/:id` — `{"passed": true}` and/or `{"comment": "…"}` | `204` |
+| `POST /api/qa/case/:id` — `{"passed": true}` and/or `{"comment": "…"}`, both optional but at least one required (`400` otherwise) | `204` |
 | `POST /api/qa/finish` — `{"note": "…"}` | `200 {"ok": true}` |
 
-A case is `{ id, title, steps, expectedResult, area, status, passed }`, where
-`status` is one of `new`, `updated`, `unchanged`, `outdated`; an outdated case
-is shown struck through rather than hidden. A discrepancy is
+A case is `{ id, title, steps, expectedResult, area, status, passed, comment }`,
+where `status` is one of `new`, `updated`, `unchanged`, `outdated`; an outdated
+case is shown struck through rather than hidden. A discrepancy is
 `{ id, summary, source, implemented }` and is displayed read-only.
 
 Each case also takes a free-text comment, written in the panel and sent to the
-server as it is typed. The server is expected to keep it beside that case; it
-is never read back, so the panel holds the only copy until it is sent.
+server as it is typed. The server keeps it beside that case and reflects it in
+the next state it hands back, so the panel shows what the server has on the
+next render.
 
 Serving that is somebody else's job — the extension is only the client. With
 nothing listening on the port, the panel never appears and the rest of the

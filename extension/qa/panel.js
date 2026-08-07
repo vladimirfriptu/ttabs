@@ -57,7 +57,7 @@ const caseRow = (item, onToggle, expandedIds, openComments, commentText, editedI
 
   const note = el('textarea', 'note');
   note.placeholder = 'note…';
-  note.value = commentText.get(item.id) ?? '';
+  note.value = commentText.has(item.id) ? commentText.get(item.id) : item.comment;
   note.hidden = !openComments.has(item.id);
 
   const markWritten = () => comment.classList.toggle('written', note.value.trim() !== '');
@@ -79,10 +79,10 @@ const caseRow = (item, onToggle, expandedIds, openComments, commentText, editedI
     onComment(item.id, note.value);
   });
 
-  // A fresh panel always renders an empty field for a case that already has a
-  // comment on the server, because GET /api/qa/state never echoes one back.
-  // Committing on every blur would send that emptiness and erase the saved
-  // note, so only a field the developer actually touched here is committed.
+  // An untouched field already shows the server's own text (or the local
+  // draft, if one exists) — committing it on blur would just resend
+  // identical text, so only a field the developer actually edited here is
+  // committed.
   note.addEventListener('blur', () => {
     if (editedIds.has(item.id)) onCommentCommit(item.id, note.value);
   });

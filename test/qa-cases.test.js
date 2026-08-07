@@ -82,7 +82,29 @@ test('fills in the parts a case may be missing', () => {
     area: UNGROUPED,
     status: 'unchanged',
     passed: false,
+    comment: '',
   });
+});
+
+test('carries a comment through', () => {
+  const state = normalizeState({
+    task: 'ACME-1',
+    cases: [{ id: 'TC-1', title: 'x', comment: 'flaky on retry' }],
+  });
+  assert.equal(state.cases[0].comment, 'flaky on retry');
+});
+
+test('defaults a missing comment to an empty string', () => {
+  const state = normalizeState({ task: 'ACME-1', cases: [{ id: 'TC-1', title: 'x' }] });
+  assert.equal(state.cases[0].comment, '');
+});
+
+test('drops a non-string comment', () => {
+  const state = normalizeState({
+    task: 'ACME-1',
+    cases: [{ id: 'TC-1', title: 'x', comment: 42 }],
+  });
+  assert.equal(state.cases[0].comment, '');
 });
 
 test('keeps an unknown status out of the case', () => {

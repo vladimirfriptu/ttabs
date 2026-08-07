@@ -15,6 +15,7 @@ const normalizeCase = (raw) => ({
   area: typeof raw.area === 'string' && raw.area.trim() ? raw.area.trim() : UNGROUPED,
   status: STATUSES.has(raw.status) ? raw.status : 'unchanged',
   passed: raw.passed === true,
+  comment: typeof raw.comment === 'string' ? raw.comment : '',
 });
 
 const normalizeDiscrepancy = (raw) => ({
