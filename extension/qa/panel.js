@@ -57,6 +57,14 @@ const caseRow = (item, onToggle, expandedIds, openComments, commentText, editedI
 
   const note = el('textarea', 'note');
   note.placeholder = 'note…';
+  // A draft that now matches the server's echo has already landed there —
+  // whatever sent it succeeded, so keeping the draft afterwards would only
+  // let it drift silently out of sync with a later external edit (e.g. the
+  // same session open in another tab) instead of tracking the server.
+  if (commentText.has(item.id) && commentText.get(item.id) === item.comment) {
+    commentText.delete(item.id);
+    editedIds.delete(item.id);
+  }
   note.value = commentText.has(item.id) ? commentText.get(item.id) : item.comment;
   note.hidden = !openComments.has(item.id);
 
