@@ -46,7 +46,9 @@ const caseRow = (item, onToggle, foldOverrides, openComments, commentText, edite
 
   const title = el('button', 'title', item.title);
   const expanded = details(item);
-  const defaultCollapsed = !item.passed;
+  // The map stores what `hidden` should be, so the default reads the same way:
+  // a finished case folds away, an unfinished one shows what to do.
+  const defaultCollapsed = item.passed;
   expanded.hidden = foldOverrides.has(item.id) ? foldOverrides.get(item.id) : defaultCollapsed;
   title.addEventListener('click', () => {
     expanded.hidden = !expanded.hidden;

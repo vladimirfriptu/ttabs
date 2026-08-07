@@ -10,6 +10,7 @@ export const PANEL_CSS = `
     bottom: 16px;
     z-index: 2147483647;
     width: 420px;
+    max-width: calc(100vw - 32px);
     max-height: 70vh;
     display: flex;
     flex-direction: column;
