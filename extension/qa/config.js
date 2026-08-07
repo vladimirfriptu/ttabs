@@ -3,7 +3,12 @@
 // mechanism, so changing the port means changing it here and there together.
 
 export const QA_PORT = 47823;
-export const QA_BASE = `http://localhost:${QA_PORT}`;
+
+// The IPv4 literal, not "localhost", on purpose: a stock /etc/hosts maps that
+// name to both 127.0.0.1 and ::1, and a server listening on IPv4 only refuses
+// the connection when the browser picks the IPv6 answer first. Naming the
+// address outright keeps the widget out of that lottery.
+export const QA_BASE = `http://127.0.0.1:${QA_PORT}`;
 
 // The message type the content script uses to borrow the service worker's
 // network access.

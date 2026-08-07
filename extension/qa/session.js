@@ -9,7 +9,13 @@
 // failed poll — so a panel only closes once POLL_TOLERANCE_MS has passed
 // since the last definitive answer, giving a restart that long to come back.
 
-import { IDLE_POLL_MS, ACTIVE_POLL_MS, COMMENT_DEBOUNCE_MS, POLL_TOLERANCE_MS } from './config.js';
+import {
+  IDLE_POLL_MS,
+  ACTIVE_POLL_MS,
+  COMMENT_DEBOUNCE_MS,
+  POLL_TOLERANCE_MS,
+  QA_BASE,
+} from './config.js';
 import { readState, setPassed, setComment, finish } from './bridge.js';
 import { createPanel } from './panel.js';
 import { normalizeState, applyPassed, finishWarning } from '../lib/qa-cases.js';
@@ -26,6 +32,7 @@ export const startSessionWatch = () => {
   // consulted while a panel is up: at idle with no server every poll fails
   // forever, and there is nothing meaningful to measure it against.
   let lastOk = Date.now();
+  let warned = false;
 
   // The pending module deliberately does not catch, so the failure has to be
   // absorbed here — an unhandled rejection in a timer reaches nobody.
@@ -126,7 +133,16 @@ export const startSessionWatch = () => {
     let raw;
     try {
       raw = await readState();
-    } catch {
+    } catch (e) {
+      // Silence is deliberate — an idle tab with no server must not spam its
+      // console every few seconds — but a widget that cannot reach the server
+      // and one that is merely waiting for a session look identical from the
+      // page. Say why once, and again only after a spell of it working.
+      if (!warned) {
+        warned = true;
+        console.warn(`[task-tabs] cannot reach the QA server at ${QA_BASE} —`, e.message);
+      }
+
       // Not a definitive answer on its own — a lone hiccup is the server
       // restarting or the service worker asleep, and the panel's typed text
       // must survive that. But the same rejection is also what "the server
@@ -138,6 +154,7 @@ export const startSessionWatch = () => {
     }
 
     lastOk = Date.now();
+    warned = false;
     const next = normalizeState(raw);
 
     if (!next) {
