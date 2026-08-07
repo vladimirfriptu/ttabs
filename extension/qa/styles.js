@@ -9,11 +9,11 @@ export const PANEL_CSS = `
     right: 16px;
     bottom: 16px;
     z-index: 2147483647;
-    width: 340px;
+    width: 420px;
     max-height: 70vh;
     display: flex;
     flex-direction: column;
-    font: 13px/1.4 -apple-system, system-ui, sans-serif;
+    font: 15px/1.4 -apple-system, system-ui, sans-serif;
     color: #1a1a1a;
     background: #fff;
     border: 1px solid #d0d0d0;
@@ -24,38 +24,59 @@ export const PANEL_CSS = `
   .head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
+    width: 100%;
+    gap: 9px;
+    padding: 9px 12px;
+    border: 0;
     border-bottom: 1px solid #e6e6e6;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
   }
 
   .task { font-weight: 600; }
   .count { color: #777; margin-left: auto; }
 
-  .collapse-toggle {
-    background: none;
-    border: 0;
-    padding: 0 2px;
-    font: inherit;
+  .chevron {
     line-height: 1;
     color: #777;
-    cursor: pointer;
   }
 
-  .body { overflow-y: auto; padding: 4px 0; }
+  /* Collapsed, the header is the whole panel: a small square icon-only
+     button, so it stays clickable to expand without any body/foot below it. */
+  .panel.collapsed {
+    width: auto;
+  }
+  .panel.collapsed .head {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+    border-bottom: 0;
+  }
+  .panel.collapsed .task,
+  .panel.collapsed .count {
+    display: none;
+  }
+  .panel.collapsed .chevron { font-size: 20px; }
+
+  .body { overflow-y: auto; padding: 5px 0; }
 
   .area {
-    padding: 6px 10px 2px;
+    padding: 7px 12px 2px;
     color: #777;
-    font-size: 11px;
+    font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
 
-  .case { padding: 3px 10px; }
+  .case { padding: 4px 12px; }
 
-  .row { display: flex; align-items: baseline; gap: 6px; }
+  .row { display: flex; align-items: baseline; gap: 7px; }
   .row input { margin: 0; }
+  .row input[type="checkbox"] { width: 16px; height: 16px; }
 
   .title {
     flex: 1;
@@ -71,7 +92,7 @@ export const PANEL_CSS = `
   .case.outdated .title { text-decoration: line-through; color: #999; }
 
   .comment {
-    padding: 0 3px;
+    padding: 0 4px;
     font: inherit;
     line-height: 1;
     color: #bbb;
@@ -84,10 +105,10 @@ export const PANEL_CSS = `
   .note {
     display: block;
     box-sizing: border-box;
-    width: calc(100% - 22px);
-    margin: 4px 0 6px 22px;
-    padding: 4px;
-    min-height: 44px;
+    width: calc(100% - 26px);
+    margin: 5px 0 7px 26px;
+    padding: 5px;
+    min-height: 50px;
     font: inherit;
     color: inherit;
     background: #fff;
@@ -96,9 +117,17 @@ export const PANEL_CSS = `
     resize: vertical;
   }
 
+  .comment-text {
+    box-sizing: border-box;
+    width: calc(100% - 26px);
+    margin: 5px 0 7px 26px;
+    color: #444;
+    white-space: pre-wrap;
+  }
+
   .badge {
-    font-size: 10px;
-    padding: 0 4px;
+    font-size: 12px;
+    padding: 0 5px;
     border-radius: 3px;
     background: #eee;
     color: #666;
@@ -107,33 +136,33 @@ export const PANEL_CSS = `
   .badge.updated { background: #fff3cd; color: #7a5c00; }
 
   .details {
-    margin: 4px 0 6px 22px;
-    padding-left: 8px;
+    margin: 5px 0 7px 26px;
+    padding-left: 9px;
     border-left: 2px solid #eee;
     color: #444;
   }
-  .details ol { margin: 0 0 4px; padding-left: 18px; }
+  .details ol { margin: 0 0 5px; padding-left: 18px; }
   .details .expected { color: #222; }
 
-  .error { color: #b00020; font-size: 11px; margin-left: 22px; }
+  .error { color: #b00020; font-size: 13px; margin-left: 26px; }
 
   .discrepancies {
     border-top: 1px solid #e6e6e6;
-    margin-top: 6px;
-    padding: 6px 10px;
+    margin-top: 7px;
+    padding: 7px 12px;
     background: #fcfaf5;
   }
-  .discrepancies h2 { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; color: #7a5c00; }
-  .discrepancy { margin-bottom: 6px; }
+  .discrepancies h2 { margin: 0 0 5px; font-size: 13px; text-transform: uppercase; color: #7a5c00; }
+  .discrepancy { margin-bottom: 7px; }
   .discrepancy .summary { font-weight: 600; }
-  .discrepancy .meta { color: #666; font-size: 11px; }
+  .discrepancy .meta { color: #666; font-size: 13px; }
 
-  .foot { padding: 8px 10px; border-top: 1px solid #e6e6e6; }
-  .finish-error { margin: 0 0 6px; }
+  .foot { padding: 9px 12px; border-top: 1px solid #e6e6e6; }
+  .finish-error { margin: 0 0 7px; }
 
   .done {
     width: 100%;
-    padding: 6px;
+    padding: 7px;
     font: inherit;
     color: #fff;
     background: #2b6b2b;
@@ -142,5 +171,5 @@ export const PANEL_CSS = `
     cursor: pointer;
   }
 
-  .ended { padding: 16px 10px; text-align: center; color: #777; }
+  .ended { padding: 18px 12px; text-align: center; color: #777; }
 `;

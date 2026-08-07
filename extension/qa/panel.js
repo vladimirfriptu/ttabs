@@ -27,7 +27,7 @@ const details = (item) => {
   return box;
 };
 
-const caseRow = (item, onToggle, collapsedIds, openComments, commentText, editedIds, onComment, onCommentCommit) => {
+const caseRow = (item, onToggle, foldOverrides, openComments, commentText, editedIds, onComment, onCommentCommit) => {
   const wrapper = el('div', `case ${item.status}`);
   wrapper.dataset.id = item.id;
 
@@ -36,15 +36,21 @@ const caseRow = (item, onToggle, collapsedIds, openComments, commentText, edited
   const checkbox = el('input');
   checkbox.type = 'checkbox';
   checkbox.checked = item.passed;
-  checkbox.addEventListener('change', () => onToggle(item.id, checkbox.checked));
+  checkbox.addEventListener('change', () => {
+    // The pass state is about to change, so whatever fold the developer
+    // chose under the old state no longer applies — let the new default
+    // (folded once passed) take back over until they fold/unfold again.
+    foldOverrides.delete(item.id);
+    onToggle(item.id, checkbox.checked);
+  });
 
   const title = el('button', 'title', item.title);
   const expanded = details(item);
-  expanded.hidden = collapsedIds.has(item.id);
+  const defaultCollapsed = !item.passed;
+  expanded.hidden = foldOverrides.has(item.id) ? foldOverrides.get(item.id) : defaultCollapsed;
   title.addEventListener('click', () => {
     expanded.hidden = !expanded.hidden;
-    if (expanded.hidden) collapsedIds.add(item.id);
-    else collapsedIds.delete(item.id);
+    foldOverrides.set(item.id, expanded.hidden);
   });
 
   row.append(checkbox, title);
@@ -65,11 +71,23 @@ const caseRow = (item, onToggle, collapsedIds, openComments, commentText, edited
     commentText.delete(item.id);
     editedIds.delete(item.id);
   }
-  note.value = commentText.has(item.id) ? commentText.get(item.id) : item.comment;
+  const currentComment = () => (commentText.has(item.id) ? commentText.get(item.id) : item.comment);
+  note.value = currentComment();
   note.hidden = !openComments.has(item.id);
 
   const markWritten = () => comment.classList.toggle('written', note.value.trim() !== '');
   markWritten();
+
+  // The read-only echo stands in for the comment field whenever it is
+  // closed, so a folded passed case still shows the one thing left to see;
+  // it is replaced by the editable field the moment 💬 opens it.
+  const commentDisplay = el('div', 'comment-text');
+  const syncCommentDisplay = () => {
+    const value = currentComment();
+    commentDisplay.hidden = !note.hidden || value.trim() === '';
+    commentDisplay.textContent = value;
+  };
+  syncCommentDisplay();
 
   comment.addEventListener('click', () => {
     note.hidden = !note.hidden;
@@ -78,6 +96,7 @@ const caseRow = (item, onToggle, collapsedIds, openComments, commentText, edited
       openComments.add(item.id);
       note.focus();
     }
+    syncCommentDisplay();
   });
 
   note.addEventListener('input', () => {
@@ -97,7 +116,7 @@ const caseRow = (item, onToggle, collapsedIds, openComments, commentText, edited
 
   row.append(comment);
 
-  wrapper.append(row, expanded, note);
+  wrapper.append(row, expanded, note, commentDisplay);
   return wrapper;
 };
 
@@ -128,12 +147,16 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
   // to see the page underneath.
   let collapsed = false;
 
-  // Steps and expected result are shown by default — they are what the
-  // developer is here to follow — so what has to be remembered across a
-  // re-render is which cases were folded away, not which were opened. Either
-  // way the keep-alive poll rebuilds every row on a timer and must not undo
-  // the developer's choice underneath them every 15 seconds.
-  const collapsedIds = new Set();
+  // The default fold now depends on the case itself (folded once passed,
+  // open otherwise), so a single set of "folded" ids can no longer express
+  // it. This map holds only the cases where the developer clicked the title
+  // and overrode that default; an id absent from it just follows the
+  // default for its current pass state. The checkbox handler drops a case's
+  // entry the moment its pass state changes, so the new default takes back
+  // over instead of carrying a stale choice made under the old state. The
+  // keep-alive poll rebuilds every row on a timer and must not undo the
+  // developer's explicit choice underneath them every 15 seconds.
+  const foldOverrides = new Map();
 
   const openComments = new Set();
   const commentText = new Map();
@@ -141,11 +164,15 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
 
   const style = el('style', null, PANEL_CSS);
   const panel = el('div', 'panel');
-  const head = el('div', 'head');
+  // The header itself is the collapse control (a real button, so it is
+  // keyboard-reachable) rather than a div wrapping its own button — nesting
+  // a clickable button inside a clickable div would fire both listeners on
+  // a click on the button and toggle twice, i.e. do nothing.
+  const head = el('button', 'head');
+  head.type = 'button';
   const task = el('span', 'task');
   const count = el('span', 'count');
-  const collapseToggle = el('button', 'collapse-toggle', '–');
-  collapseToggle.type = 'button';
+  const chevron = el('span', 'chevron', '–');
   const body = el('div', 'body');
   const foot = el('div', 'foot');
   const done = el('button', 'done', 'Done');
@@ -155,17 +182,22 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
   const applyCollapsed = () => {
     body.hidden = collapsed;
     foot.hidden = collapsed;
-    collapseToggle.textContent = collapsed ? '▸' : '–';
-    collapseToggle.setAttribute('aria-label', collapsed ? 'expand' : 'collapse');
+    panel.classList.toggle('collapsed', collapsed);
+    head.setAttribute('aria-label', collapsed ? 'expand' : 'collapse');
+    // Collapsed, the header shrinks to an icon-only square — the task and
+    // count text disappear visually (CSS) but stay reachable as the title
+    // tooltip so hovering still answers "what session is this".
+    chevron.textContent = collapsed ? '📋' : '–';
+    head.title = collapsed ? `${task.textContent} — ${count.textContent}` : '';
   };
 
-  collapseToggle.addEventListener('click', () => {
+  head.addEventListener('click', () => {
     collapsed = !collapsed;
     applyCollapsed();
   });
 
   done.addEventListener('click', onFinish);
-  head.append(task, count, collapseToggle);
+  head.append(task, count, chevron);
   foot.append(finishError, done);
   panel.append(head, body, foot);
   root.append(style, panel);
@@ -178,8 +210,8 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
       count.textContent = `${passed}/${state.cases.length}`;
 
       const knownIds = new Set(state.cases.map((c) => c.id));
-      for (const id of collapsedIds) {
-        if (!knownIds.has(id)) collapsedIds.delete(id);
+      for (const id of foldOverrides.keys()) {
+        if (!knownIds.has(id)) foldOverrides.delete(id);
       }
       for (const id of openComments) {
         if (!knownIds.has(id)) openComments.delete(id);
@@ -206,7 +238,7 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
       for (const group of groupByArea(state.cases)) {
         body.append(el('div', 'area', group.area));
         for (const item of group.cases) {
-          body.append(caseRow(item, onToggle, collapsedIds, openComments, commentText, editedIds, onComment, onCommentCommit));
+          body.append(caseRow(item, onToggle, foldOverrides, openComments, commentText, editedIds, onComment, onCommentCommit));
         }
       }
       if (state.discrepancies.length > 0) body.append(discrepancySection(state.discrepancies));
