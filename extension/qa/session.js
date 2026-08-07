@@ -6,9 +6,9 @@
 // local tab the developer has open.
 
 import { IDLE_POLL_MS } from './config.js';
-import { readState, setPassed } from './bridge.js';
+import { readState, setPassed, finish } from './bridge.js';
 import { createPanel } from './panel.js';
-import { normalizeState, applyPassed } from '../lib/qa-cases.js';
+import { normalizeState, applyPassed, finishWarning } from '../lib/qa-cases.js';
 
 export const startSessionWatch = () => {
   let timer = null;
@@ -44,9 +44,27 @@ export const startSessionWatch = () => {
     await poll();
   };
 
+  const onFinish = async () => {
+    const warning = finishWarning(state.cases);
+    if (warning && !window.confirm(warning)) return;
+
+    try {
+      await finish('');
+    } catch (e) {
+      // The panel stays up: the CLI on the other end is still blocked, so
+      // pretending the session ended would hide that from the developer.
+      panel?.showError(state.cases[0]?.id, `could not finish: ${e.message}`);
+      return;
+    }
+
+    panel?.showEnded();
+    stopIdlePolling();
+    setTimeout(close, 2000);
+  };
+
   const open = (next) => {
     state = next;
-    if (!panel) panel = createPanel({ onToggle, onFinish: () => {} });
+    if (!panel) panel = createPanel({ onToggle, onFinish });
     panel.render(state);
   };
 
