@@ -1,5 +1,3 @@
-import { readState } from './bridge.js';
+import { startSessionWatch } from './session.js';
 
-export const start = () => {
-  readState().then((state) => console.log('[task-tabs] qa state:', state));
-};
+export const start = startSessionWatch;
