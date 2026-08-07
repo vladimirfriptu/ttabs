@@ -23,7 +23,9 @@ export const ACTIVE_POLL_MS = 15000;
 // that the text is on the server before the developer moves on.
 export const COMMENT_DEBOUNCE_MS = 1000;
 
-// Consecutive failed polls tolerated before a panel is closed as dead. Paired
-// with ACTIVE_POLL_MS this gives a killed server roughly half a minute to
-// come back — enough to survive a restart — before the panel gives up.
-export const MAX_POLL_FAILURES = 2;
+// How long a panel tolerates nothing but failed polls before it treats the
+// server as dead rather than merely restarting. Wall-clock, not a poll count:
+// two failures can land a second apart (an active tick mid-restart, then an
+// immediate visibilitychange poll when the tab regains focus) or two ticks
+// apart, and the guarantee has to hold either way.
+export const POLL_TOLERANCE_MS = 2 * ACTIVE_POLL_MS;

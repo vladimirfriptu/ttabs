@@ -6,10 +6,10 @@
 // notices the session ending instead of the panel going zombie forever.
 //
 // "The session ended" and "the server process died" arrive the same way — a
-// failed poll — so a panel only closes after MAX_POLL_FAILURES of those in a
-// row, giving a restart roughly a keep-alive interval's worth of slack.
+// failed poll — so a panel only closes once POLL_TOLERANCE_MS has passed
+// since the last definitive answer, giving a restart that long to come back.
 
-import { IDLE_POLL_MS, ACTIVE_POLL_MS, COMMENT_DEBOUNCE_MS, MAX_POLL_FAILURES } from './config.js';
+import { IDLE_POLL_MS, ACTIVE_POLL_MS, COMMENT_DEBOUNCE_MS, POLL_TOLERANCE_MS } from './config.js';
 import { readState, setPassed, setComment, finish } from './bridge.js';
 import { createPanel } from './panel.js';
 import { normalizeState, applyPassed, finishWarning } from '../lib/qa-cases.js';
@@ -22,9 +22,10 @@ export const startSessionWatch = () => {
   let state = null;
   let finishing = false;
 
-  // Only counted while a panel is up: at idle with no server every poll fails
-  // forever, and the count would just grow without meaning anything.
-  let failures = 0;
+  // When the last definitive answer (a session, or a real 404) arrived. Only
+  // consulted while a panel is up: at idle with no server every poll fails
+  // forever, and there is nothing meaningful to measure it against.
+  let lastOk = Date.now();
 
   // The pending module deliberately does not catch, so the failure has to be
   // absorbed here — an unhandled rejection in a timer reaches nobody.
@@ -68,7 +69,7 @@ export const startSessionWatch = () => {
     panel = null;
     state = null;
     finishing = false;
-    failures = 0;
+    lastOk = Date.now();
     stopActivePolling();
     startIdlePolling();
   };
@@ -129,16 +130,14 @@ export const startSessionWatch = () => {
       // Not a definitive answer on its own — a lone hiccup is the server
       // restarting or the service worker asleep, and the panel's typed text
       // must survive that. But the same rejection is also what "the server
-      // process is gone" looks like, so a run of them, while a panel is up,
-      // is read as the session having ended.
-      if (panel) {
-        failures += 1;
-        if (failures >= MAX_POLL_FAILURES) close();
-      }
+      // process is gone" looks like, so once nothing but failures has
+      // arrived for POLL_TOLERANCE_MS, while a panel is up, it is read as
+      // the session having ended — however many polls that took.
+      if (panel && Date.now() - lastOk >= POLL_TOLERANCE_MS) close();
       return;
     }
 
-    failures = 0;
+    lastOk = Date.now();
     const next = normalizeState(raw);
 
     if (!next) {

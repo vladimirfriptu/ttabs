@@ -187,6 +187,26 @@ test('a second send for the same case waits behind the first instead of racing i
   assert.deepEqual(arrived, ['hel', 'hello world']);
 }));
 
+test('clear stops flush from waiting on a send that never settles', withFakeTimers(async () => {
+  const send = () => new Promise(() => {}); // never settles — a wedged request
+  const pending = createPendingSends(send, 1000);
+
+  pending.queue('TC-1', 'first');
+  const sent = pending.sendNow('TC-1');
+  void sent.catch(() => {}); // this send is intentionally abandoned, not awaited
+
+  pending.clear();
+
+  let flushResolved = false;
+  const flushed = pending.flush().then(() => { flushResolved = true; });
+
+  // setImmediate is not mocked by mock.timers, so this drains microtasks
+  // without advancing the fake clock, giving flush() a chance to resolve.
+  await new Promise((resolve) => { setImmediate(resolve); });
+  assert.equal(flushResolved, true, 'flush waited on a send clear() should have forgotten');
+  await flushed;
+}));
+
 test('clear cancels everything and sends nothing', withFakeTimers(async () => {
   const { calls, send } = recorder();
   const pending = createPendingSends(send, 1000);

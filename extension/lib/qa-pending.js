@@ -54,6 +54,11 @@ export const createPendingSends = (send, delayMs) => {
     clear() {
       for (const entry of queued.values()) clearTimeout(entry.timer);
       queued.clear();
+      // The session this send belonged to is over. A send already in flight
+      // is left to run — nothing here can abort it — but nobody waits for it
+      // any more, or a send that never settles would wedge a later flush().
+      inflight.clear();
+      chains.clear();
     },
 
     pending: () => [...queued.keys()],

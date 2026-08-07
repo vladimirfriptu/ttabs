@@ -210,7 +210,6 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
         }
       }
 
-      foot.hidden = false;
       applyCollapsed();
     },
 
