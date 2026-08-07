@@ -27,7 +27,7 @@ const details = (item) => {
   return box;
 };
 
-const caseRow = (item, onToggle, expandedIds) => {
+const caseRow = (item, onToggle, expandedIds, openComments, commentText, onComment, onCommentCommit) => {
   const wrapper = el('div', `case ${item.status}`);
   wrapper.dataset.id = item.id;
 
@@ -52,7 +52,37 @@ const caseRow = (item, onToggle, expandedIds) => {
     row.append(el('span', `badge ${item.status}`, item.status));
   }
 
-  wrapper.append(row, expanded);
+  const comment = el('button', 'comment', '💬');
+  comment.title = 'comment';
+
+  const note = el('textarea', 'note');
+  note.placeholder = 'note…';
+  note.value = commentText.get(item.id) ?? '';
+  note.hidden = !openComments.has(item.id);
+
+  const markWritten = () => comment.classList.toggle('written', note.value.trim() !== '');
+  markWritten();
+
+  comment.addEventListener('click', () => {
+    note.hidden = !note.hidden;
+    if (note.hidden) openComments.delete(item.id);
+    else {
+      openComments.add(item.id);
+      note.focus();
+    }
+  });
+
+  note.addEventListener('input', () => {
+    commentText.set(item.id, note.value);
+    markWritten();
+    onComment(item.id, note.value);
+  });
+
+  note.addEventListener('blur', () => onCommentCommit(item.id, note.value));
+
+  row.append(comment);
+
+  wrapper.append(row, expanded, note);
   return wrapper;
 };
 
@@ -71,7 +101,7 @@ const discrepancySection = (discrepancies) => {
   return box;
 };
 
-export const createPanel = ({ onToggle, onFinish }) => {
+export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) => {
   const host = el('div');
   host.id = HOST_ID;
   const root = host.attachShadow({ mode: 'open' });
@@ -85,6 +115,9 @@ export const createPanel = ({ onToggle, onFinish }) => {
   // every row on a timer, and a developer mid-way through reading a case's
   // steps must not have them slam shut underneath them every 15 seconds.
   const expandedIds = new Set();
+
+  const openComments = new Set();
+  const commentText = new Map();
 
   const style = el('style', null, PANEL_CSS);
   const panel = el('div', 'panel');
@@ -126,15 +159,41 @@ export const createPanel = ({ onToggle, onFinish }) => {
       for (const id of expandedIds) {
         if (!knownIds.has(id)) expandedIds.delete(id);
       }
+      for (const id of openComments) {
+        if (!knownIds.has(id)) openComments.delete(id);
+      }
+      for (const id of commentText.keys()) {
+        if (!knownIds.has(id)) commentText.delete(id);
+      }
 
       const scrollTop = body.scrollTop;
+
+      const focused = root.activeElement;
+      const typing = focused?.classList.contains('note')
+        ? {
+            id: focused.closest('.case').dataset.id,
+            start: focused.selectionStart,
+            end: focused.selectionEnd,
+          }
+        : null;
+
       body.replaceChildren();
       for (const group of groupByArea(state.cases)) {
         body.append(el('div', 'area', group.area));
-        for (const item of group.cases) body.append(caseRow(item, onToggle, expandedIds));
+        for (const item of group.cases) {
+          body.append(caseRow(item, onToggle, expandedIds, openComments, commentText, onComment, onCommentCommit));
+        }
       }
       if (state.discrepancies.length > 0) body.append(discrepancySection(state.discrepancies));
       body.scrollTop = scrollTop;
+
+      if (typing) {
+        const restored = body.querySelector(`.case[data-id="${CSS.escape(typing.id)}"] .note`);
+        if (restored) {
+          restored.focus();
+          restored.setSelectionRange(typing.start, typing.end);
+        }
+      }
 
       foot.hidden = false;
       applyCollapsed();

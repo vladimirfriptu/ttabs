@@ -70,6 +70,32 @@ export const PANEL_CSS = `
 
   .case.outdated .title { text-decoration: line-through; color: #999; }
 
+  .comment {
+    padding: 0 3px;
+    font: inherit;
+    line-height: 1;
+    color: #bbb;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .comment.written { color: #2b6b2b; }
+
+  .note {
+    display: block;
+    box-sizing: border-box;
+    width: calc(100% - 22px);
+    margin: 4px 0 6px 22px;
+    padding: 4px;
+    min-height: 44px;
+    font: inherit;
+    color: inherit;
+    background: #fff;
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    resize: vertical;
+  }
+
   .badge {
     font-size: 10px;
     padding: 0 4px;
