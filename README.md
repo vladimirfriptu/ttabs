@@ -25,6 +25,29 @@ from `open`, so `task-tab` opens the extension's own control page with query
 parameters. That page performs the operation and closes itself. No native
 messaging host, no local server. The only background piece is the status sync.
 
+## QA checklist panel
+
+The extension also carries a small optional widget: a floating checklist panel
+that appears on `localhost` pages whenever a local QA server is running on
+port `47823`, and disappears when it is not.
+
+It expects that server to answer three endpoints:
+
+| Request | Answer |
+| --- | --- |
+| `GET /api/qa/state` | `200` with `{ task, cases, discrepancies }`, or `404` when no session is running |
+| `POST /api/qa/case/:id` — `{"passed": true}` | `204` |
+| `POST /api/qa/finish` — `{"note": "…"}` | `200 {"ok": true}` |
+
+A case is `{ id, title, steps, expectedResult, area, status, passed }`, where
+`status` is one of `new`, `updated`, `unchanged`, `outdated`; an outdated case
+is shown struck through rather than hidden. A discrepancy is
+`{ id, summary, source, implemented }` and is displayed read-only.
+
+Serving that is somebody else's job — the extension is only the client. With
+nothing listening on the port, the panel never appears and the rest of the
+extension is unaffected.
+
 ## Install
 
 ```bash
