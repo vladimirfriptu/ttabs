@@ -1,0 +1,138 @@
+import test from 'node:test';
+import assert from 'node:assert';
+
+import {
+  UNGROUPED,
+  normalizeState,
+  groupByArea,
+  uncheckedCount,
+  applyPassed,
+  finishWarning,
+} from '../extension/lib/qa-cases.js';
+
+const payload = () => ({
+  task: 'ACME-1234',
+  cases: [
+    {
+      id: 'TC-1',
+      title: 'opens the form',
+      steps: ['click add', 'see the form'],
+      expectedResult: 'the form is open',
+      area: 'forms',
+      status: 'new',
+      passed: false,
+    },
+    {
+      id: 'TC-2',
+      title: 'saves the form',
+      steps: [],
+      expectedResult: 'a row appears',
+      area: 'forms',
+      status: 'outdated',
+      passed: true,
+    },
+    {
+      id: 'TC-3',
+      title: 'shows the list',
+      steps: [],
+      expectedResult: 'rows are listed',
+      area: 'list',
+      status: 'unchanged',
+      passed: false,
+    },
+  ],
+  discrepancies: [
+    { id: 'D-1', summary: 'no empty state', source: 'comment', implemented: 'renders nothing' },
+  ],
+});
+
+test('normalises a well-formed payload unchanged', () => {
+  const state = normalizeState(payload());
+  assert.equal(state.task, 'ACME-1234');
+  assert.equal(state.cases.length, 3);
+  assert.equal(state.discrepancies.length, 1);
+});
+
+test('rejects a payload that is not a session', () => {
+  assert.equal(normalizeState(null), null);
+  assert.equal(normalizeState({}), null);
+  assert.equal(normalizeState({ task: 'ACME-1' }), null);
+  assert.equal(normalizeState({ cases: [] }), null);
+});
+
+test('accepts a session with no cases yet', () => {
+  const state = normalizeState({ task: 'ACME-1', cases: [] });
+  assert.deepEqual(state, { task: 'ACME-1', cases: [], discrepancies: [] });
+});
+
+test('drops cases without an id or a title', () => {
+  const raw = payload();
+  raw.cases.push({ title: 'no id' }, { id: 'TC-9' });
+  const state = normalizeState(raw);
+  assert.deepEqual(state.cases.map((c) => c.id), ['TC-1', 'TC-2', 'TC-3']);
+});
+
+test('fills in the parts a case may be missing', () => {
+  const state = normalizeState({ task: 'ACME-1', cases: [{ id: 'TC-1', title: 'bare' }] });
+  assert.deepEqual(state.cases[0], {
+    id: 'TC-1',
+    title: 'bare',
+    steps: [],
+    expectedResult: '',
+    area: UNGROUPED,
+    status: 'unchanged',
+    passed: false,
+  });
+});
+
+test('keeps an unknown status out of the case', () => {
+  const state = normalizeState({
+    task: 'ACME-1',
+    cases: [{ id: 'TC-1', title: 'x', status: 'weird' }],
+  });
+  assert.equal(state.cases[0].status, 'unchanged');
+});
+
+test('groups cases by area in first-appearance order', () => {
+  const state = normalizeState(payload());
+  assert.deepEqual(
+    groupByArea(state.cases).map((g) => [g.area, g.cases.map((c) => c.id)]),
+    [['forms', ['TC-1', 'TC-2']], ['list', ['TC-3']]],
+  );
+});
+
+test('counts only the cases not marked passed', () => {
+  const state = normalizeState(payload());
+  assert.equal(uncheckedCount(state.cases), 2);
+});
+
+test('applies a toggle without touching the original state', () => {
+  const state = normalizeState(payload());
+  const next = applyPassed(state, 'TC-1', true);
+  assert.equal(next.cases[0].passed, true);
+  assert.equal(state.cases[0].passed, false);
+});
+
+test('ignores a toggle for an id it does not know', () => {
+  const state = normalizeState(payload());
+  const next = applyPassed(state, 'TC-404', true);
+  assert.deepEqual(next.cases, state.cases);
+});
+
+test('warns about the cases still unchecked', () => {
+  const state = normalizeState(payload());
+  assert.equal(finishWarning(state.cases), '2 cases not marked passed — finish anyway?');
+});
+
+test('warns in the singular for one unchecked case', () => {
+  const state = normalizeState({
+    task: 'ACME-1',
+    cases: [{ id: 'TC-1', title: 'x' }, { id: 'TC-2', title: 'y', passed: true }],
+  });
+  assert.equal(finishWarning(state.cases), '1 case not marked passed — finish anyway?');
+});
+
+test('does not warn when everything is checked', () => {
+  const state = normalizeState({ task: 'ACME-1', cases: [{ id: 'TC-1', title: 'x', passed: true }] });
+  assert.equal(finishWarning(state.cases), null);
+});
