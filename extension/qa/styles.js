@@ -4,6 +4,11 @@
 export const PANEL_CSS = `
   :host { all: initial; }
 
+  /* An author rule setting display beats the user-agent stylesheet's rule for
+     [hidden], and several rules below set it — without this the hidden property
+     the panel toggles everywhere would quietly do nothing. */
+  [hidden] { display: none !important; }
+
   .panel {
     position: fixed;
     right: 16px;
