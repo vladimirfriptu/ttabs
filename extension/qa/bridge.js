@@ -1,7 +1,12 @@
 // The content script's half of the QA channel. Everything crossing it is
 // plain JSON — the service worker does the actual fetching.
 
-import { QA_MESSAGE } from './config.js';
+import { QA_MESSAGE, QA_TASK_KEY_MESSAGE } from './config.js';
+
+// The task key of this tab's own group, or null when it has none. Resolved
+// fresh on every call — a tab can be dragged into another group, or its
+// group renamed, after the page loaded.
+export const readTaskKey = async () => chrome.runtime.sendMessage({ type: QA_TASK_KEY_MESSAGE });
 
 const send = async (method, path, body) => {
   const reply = await chrome.runtime.sendMessage({ type: QA_MESSAGE, method, path, body });

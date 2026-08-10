@@ -7,6 +7,7 @@ import {
   groupByArea,
   uncheckedCount,
   applyPassed,
+  matchesTask,
   finishWarning,
 } from '../extension/lib/qa-cases.js';
 
@@ -139,6 +140,22 @@ test('ignores a toggle for an id it does not know', () => {
   const state = normalizeState(payload());
   const next = applyPassed(state, 'TC-404', true);
   assert.deepEqual(next.cases, state.cases);
+});
+
+test('matchesTask rejects a null or empty key', () => {
+  const state = normalizeState(payload());
+  assert.equal(matchesTask(state, null), false);
+  assert.equal(matchesTask(state, ''), false);
+});
+
+test('matchesTask rejects a different task', () => {
+  const state = normalizeState(payload());
+  assert.equal(matchesTask(state, 'ACME-9999'), false);
+});
+
+test('matchesTask accepts the same task', () => {
+  const state = normalizeState(payload());
+  assert.equal(matchesTask(state, 'ACME-1234'), true);
 });
 
 test('warns about the cases still unchecked', () => {

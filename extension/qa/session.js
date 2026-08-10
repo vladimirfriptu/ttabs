@@ -16,9 +16,9 @@ import {
   POLL_TOLERANCE_MS,
   QA_BASE,
 } from './config.js';
-import { readState, setPassed, setComment, finish } from './bridge.js';
+import { readState, readTaskKey, setPassed, setComment, finish } from './bridge.js';
 import { createPanel } from './panel.js';
-import { normalizeState, applyPassed, finishWarning } from '../lib/qa-cases.js';
+import { normalizeState, applyPassed, matchesTask, finishWarning } from '../lib/qa-cases.js';
 import { createPendingSends } from '../lib/qa-pending.js';
 
 export const startSessionWatch = () => {
@@ -33,6 +33,17 @@ export const startSessionWatch = () => {
   // forever, and there is nothing meaningful to measure it against.
   let lastOk = Date.now();
   let warned = false;
+
+  // The last "why nothing is showing" reason printed for this tab, or null
+  // when there is nothing to explain. Printed once per reason, and again
+  // only once the reason changes, so a tab stuck out of its task's group
+  // does not spam the console every poll.
+  let taskNotice = null;
+  const noteTaskState = (reason) => {
+    if (taskNotice === reason) return;
+    taskNotice = reason;
+    if (reason) console.info(`[task-tabs] ${reason}`);
+  };
 
   // The pending module deliberately does not catch, so the failure has to be
   // absorbed here — an unhandled rejection in a timer reaches nobody.
@@ -130,6 +141,14 @@ export const startSessionWatch = () => {
   };
 
   const poll = async () => {
+    const key = await readTaskKey().catch(() => null);
+
+    if (!key) {
+      noteTaskState("this tab isn't in a task's tab group — no checklist to show");
+      if (panel) close();
+      return;
+    }
+
     let raw;
     try {
       raw = await readState();
@@ -158,9 +177,18 @@ export const startSessionWatch = () => {
     const next = normalizeState(raw);
 
     if (!next) {
+      noteTaskState(null);
       if (panel) close();
       return;
     }
+
+    if (!matchesTask(next, key)) {
+      noteTaskState(`this tab's task (${key}) isn't the running session's (${next.task}) — hiding its checklist`);
+      if (panel) close();
+      return;
+    }
+
+    noteTaskState(null);
 
     // A finish already succeeded and the "session ended" notice is showing;
     // a poll landing in that two-second grace window must not repaint over

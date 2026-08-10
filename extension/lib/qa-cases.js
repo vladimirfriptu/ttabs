@@ -58,6 +58,8 @@ export const applyPassed = (state, id, passed) => ({
   cases: state.cases.map((c) => (c.id === id ? { ...c, passed } : c)),
 });
 
+export const matchesTask = (state, key) => !!key && state?.task === key;
+
 export const finishWarning = (cases) => {
   const left = uncheckedCount(cases);
   if (left === 0) return null;

@@ -14,6 +14,10 @@ export const QA_BASE = `http://127.0.0.1:${QA_PORT}`;
 // network access.
 export const QA_MESSAGE = 'qa-request';
 
+// The message type a content script uses to ask which task its own tab's
+// group belongs to — only the service worker can see tabs and groups.
+export const QA_TASK_KEY_MESSAGE = 'qa-task-key';
+
 // How often to ask whether a session has started. Only ticks while no session
 // is open — once the panel is up, refreshes are driven by what the user does.
 export const IDLE_POLL_MS = 5000;
