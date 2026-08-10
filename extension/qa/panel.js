@@ -115,13 +115,11 @@ const caseRow = (item, onToggle, foldOverrides, openComments, commentText, edite
   // identical text, so only a field the developer actually edited here is
   // committed.
   //
-  // Leaving the field closes it: the developer opened it to write, wrote, and
-  // moved on. A re-render does not come through here — removing a focused node
-  // fires no blur — so a keep-alive tick mid-sentence leaves the field open.
+  // Losing focus must not close the field. The keep-alive rebuild necessarily
+  // takes focus off this node, and a field closed by that is a field rendered
+  // hidden — which focus() cannot restore. Only folding the case closes it.
   note.addEventListener('blur', () => {
     if (editedIds.has(item.id)) onCommentCommit(item.id, note.value);
-    openComments.delete(item.id);
-    syncComment();
   });
 
   wrapper.append(row, expanded, commentDisplay, addComment, note);
@@ -241,6 +239,10 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
             end: focused.selectionEnd,
           }
         : null;
+
+      // Whatever else happened, a field being typed into stays open across the
+      // rebuild: rendered hidden, it could not take the focus back.
+      if (typing) openComments.add(typing.id);
 
       body.replaceChildren();
       for (const group of groupByArea(state.cases)) {
