@@ -43,7 +43,7 @@ export const startSessionWatch = () => {
   const handleTransportFailure = (prefix, detail) => {
     if (!warned) {
       warned = true;
-      console.warn(`[task-tabs] ${prefix}`, detail);
+      console.debug(`[task-tabs] ${prefix}`, detail);
     }
     if (panel && Date.now() - lastOk >= POLL_TOLERANCE_MS) close();
   };
@@ -56,7 +56,7 @@ export const startSessionWatch = () => {
   const noteTaskState = (reason) => {
     if (taskNotice === reason) return;
     taskNotice = reason;
-    if (reason) console.info(`[task-tabs] ${reason}`);
+    if (reason) console.debug(`[task-tabs] ${reason}`);
   };
 
   // The pending module deliberately does not catch, so the failure has to be

@@ -49,9 +49,20 @@ server as it is typed. The server keeps it beside that case and reflects it in
 the next state it hands back, so the panel shows what the server has on the
 next render.
 
+A panel belongs to the task of the tab group its tab sits in: with several
+tasks open at once, one task's checklist never appears over another task's app,
+and a tab in no group shows nothing and makes no requests.
+
 Serving that is somebody else's job — the extension is only the client. With
 nothing listening on the port, the panel never appears and the rest of the
 extension is unaffected.
+
+When it does not appear and you want to know why, set the page console's level
+filter to **Verbose**: the widget explains itself there — whether its content
+script loaded, which task it resolved for the tab, and whether the server
+answered. It says nothing at the default level, since most tasks never run a
+checklist server and a widget should not narrate its idleness into someone
+else's console.
 
 ## Install
 
