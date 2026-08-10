@@ -34,6 +34,20 @@ export const startSessionWatch = () => {
   let lastOk = Date.now();
   let warned = false;
 
+  // Shared by every fallible round-trip (the task-key lookup, the state
+  // fetch): warn once per outage rather than once per poll, and only read a
+  // panel-less run of failures as "the session ended" once POLL_TOLERANCE_MS
+  // has passed since the last one that actually got an answer — a lone
+  // hiccup is the server restarting or the service worker asleep, and the
+  // panel's typed text must survive that.
+  const handleTransportFailure = (prefix, detail) => {
+    if (!warned) {
+      warned = true;
+      console.warn(`[task-tabs] ${prefix}`, detail);
+    }
+    if (panel && Date.now() - lastOk >= POLL_TOLERANCE_MS) close();
+  };
+
   // The last "why nothing is showing" reason printed for this tab, or null
   // when there is nothing to explain. Printed once per reason, and again
   // only once the reason changes, so a tab stuck out of its task's group
@@ -141,7 +155,17 @@ export const startSessionWatch = () => {
   };
 
   const poll = async () => {
-    const key = await readTaskKey().catch(() => null);
+    let key;
+    try {
+      key = await readTaskKey();
+    } catch (e) {
+      // A rejection here means the runtime-message round-trip itself failed
+      // (the service worker restarting, the extension reloading) — not that
+      // the tab has no task. That is exactly the failed-readState case below,
+      // so it gets the same tolerance rather than closing on the spot.
+      handleTransportFailure("cannot ask the extension what this tab's task is —", e.message);
+      return;
+    }
 
     if (!key) {
       noteTaskState("this tab isn't in a task's tab group — no checklist to show");
@@ -157,18 +181,7 @@ export const startSessionWatch = () => {
       // console every few seconds — but a widget that cannot reach the server
       // and one that is merely waiting for a session look identical from the
       // page. Say why once, and again only after a spell of it working.
-      if (!warned) {
-        warned = true;
-        console.warn(`[task-tabs] cannot reach the QA server at ${QA_BASE} —`, e.message);
-      }
-
-      // Not a definitive answer on its own — a lone hiccup is the server
-      // restarting or the service worker asleep, and the panel's typed text
-      // must survive that. But the same rejection is also what "the server
-      // process is gone" looks like, so once nothing but failures has
-      // arrived for POLL_TOLERANCE_MS, while a panel is up, it is read as
-      // the session having ended — however many polls that took.
-      if (panel && Date.now() - lastOk >= POLL_TOLERANCE_MS) close();
+      handleTransportFailure(`cannot reach the QA server at ${QA_BASE} —`, e.message);
       return;
     }
 
