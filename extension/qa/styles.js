@@ -92,16 +92,18 @@ export const PANEL_CSS = `
 
   .case.outdated .title { text-decoration: line-through; color: #999; }
 
-  .comment {
-    padding: 0 4px;
+  .add-comment {
+    display: block;
+    margin: 5px 0 7px 26px;
+    padding: 3px 8px;
     font: inherit;
-    line-height: 1;
-    color: #bbb;
-    background: none;
-    border: 0;
+    color: #555;
+    background: #f4f4f4;
+    border: 1px solid #d8d8d8;
+    border-radius: 5px;
     cursor: pointer;
   }
-  .comment.written { color: #2b6b2b; }
+  .add-comment:hover { background: #ececec; }
 
   .note {
     display: block;

@@ -53,6 +53,11 @@ const caseRow = (item, onToggle, foldOverrides, openComments, commentText, edite
   title.addEventListener('click', () => {
     expanded.hidden = !expanded.hidden;
     foldOverrides.set(item.id, expanded.hidden);
+    // Folding a case takes its comment field with it: a folded case shows the
+    // comment as text and nothing else, so leaving the field open would have
+    // it reappear on the next unfold with no way to have closed it.
+    if (expanded.hidden) openComments.delete(item.id);
+    syncComment();
   });
 
   row.append(checkbox, title);
@@ -60,11 +65,6 @@ const caseRow = (item, onToggle, foldOverrides, openComments, commentText, edite
     row.append(el('span', `badge ${item.status}`, item.status));
   }
 
-  const comment = el('button', 'comment', '💬');
-  comment.title = 'comment';
-
-  const note = el('textarea', 'note');
-  note.placeholder = 'note…';
   // A draft that now matches the server's echo has already landed there —
   // whatever sent it succeeded, so keeping the draft afterwards would only
   // let it drift silently out of sync with a later external edit (e.g. the
@@ -74,37 +74,39 @@ const caseRow = (item, onToggle, foldOverrides, openComments, commentText, edite
     editedIds.delete(item.id);
   }
   const currentComment = () => (commentText.has(item.id) ? commentText.get(item.id) : item.comment);
-  note.value = currentComment();
-  note.hidden = !openComments.has(item.id);
 
-  const markWritten = () => comment.classList.toggle('written', note.value.trim() !== '');
-  markWritten();
-
-  // The read-only echo stands in for the comment field whenever it is
-  // closed, so a folded passed case still shows the one thing left to see;
-  // it is replaced by the editable field the moment 💬 opens it.
   const commentDisplay = el('div', 'comment-text');
-  const syncCommentDisplay = () => {
-    const value = currentComment();
-    commentDisplay.hidden = !note.hidden || value.trim() === '';
-    commentDisplay.textContent = value;
-  };
-  syncCommentDisplay();
+  const addComment = el('button', 'add-comment');
+  addComment.type = 'button';
+  const note = el('textarea', 'note');
+  note.placeholder = 'note…';
+  note.value = currentComment();
 
-  comment.addEventListener('click', () => {
-    note.hidden = !note.hidden;
-    if (note.hidden) openComments.delete(item.id);
-    else {
-      openComments.add(item.id);
-      note.focus();
-    }
-    syncCommentDisplay();
+  // The three are mutually exclusive by construction rather than by three
+  // separate handlers agreeing with each other: an open field replaces the
+  // text it would otherwise duplicate, and a folded case offers no way in.
+  const syncComment = () => {
+    const value = currentComment();
+    const open = !expanded.hidden && openComments.has(item.id);
+
+    note.hidden = !open;
+    commentDisplay.textContent = value;
+    commentDisplay.hidden = open || value.trim() === '';
+    addComment.textContent = value.trim() ? 'edit comment' : 'add comment';
+    addComment.hidden = expanded.hidden || open;
+  };
+  syncComment();
+
+  addComment.addEventListener('click', () => {
+    openComments.add(item.id);
+    // Unhide before focusing — a hidden element cannot take focus.
+    syncComment();
+    note.focus();
   });
 
   note.addEventListener('input', () => {
     commentText.set(item.id, note.value);
     editedIds.add(item.id);
-    markWritten();
     onComment(item.id, note.value);
   });
 
@@ -112,13 +114,17 @@ const caseRow = (item, onToggle, foldOverrides, openComments, commentText, edite
   // draft, if one exists) — committing it on blur would just resend
   // identical text, so only a field the developer actually edited here is
   // committed.
+  //
+  // Leaving the field closes it: the developer opened it to write, wrote, and
+  // moved on. A re-render does not come through here — removing a focused node
+  // fires no blur — so a keep-alive tick mid-sentence leaves the field open.
   note.addEventListener('blur', () => {
     if (editedIds.has(item.id)) onCommentCommit(item.id, note.value);
+    openComments.delete(item.id);
+    syncComment();
   });
 
-  row.append(comment);
-
-  wrapper.append(row, expanded, note, commentDisplay);
+  wrapper.append(row, expanded, commentDisplay, addComment, note);
   return wrapper;
 };
 
