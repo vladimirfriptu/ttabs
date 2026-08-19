@@ -1,7 +1,8 @@
 // The panel's DOM, and nothing else — it renders what it is given and reports
 // clicks back. Deciding what to do with a click is session.js's business.
 
-import { closedCount, hasRecords, isSettable } from '../lib/phases.js';
+import { closedCount, groupByStage, hasRecords } from '../lib/phases.js';
+import { safeHref } from '../lib/href.js';
 import { PANEL_CSS } from './styles.js';
 import { makeDraggable } from '../lib/draggable.js';
 
@@ -14,66 +15,150 @@ const el = (tag, className, text) => {
   return node;
 };
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// The list's glyphs are drawn rather than typed: a font's ✓ and – differ in
+// weight and baseline between platforms, and these sit in a 15px box.
+const icon = ({ className, size, stroke, width, paths }) => {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('width', size);
+  svg.setAttribute('height', size);
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', stroke);
+  svg.setAttribute('stroke-width', width);
+  svg.setAttribute('stroke-linecap', 'round');
+  for (const d of paths) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.append(path);
+  }
+  return svg;
+};
+
+const OUT_PATHS = ['M4.5 2.5h5v5', 'M9.5 2.5 4 8', 'M8 9.5H2.5V4'];
+const TICK_PATHS = ['M2.5 6.5 5 9l4.5-6'];
+const DASH_PATHS = ['M2.5 6h7'];
+const ARROW_PATHS = ['M4.5 2.5 8 6l-3.5 3.5'];
+
+const outIcon = (className, stroke) =>
+  icon({ className, size: 10, stroke, width: 1.5, paths: OUT_PATHS });
+
 const CLASS_FOR_STATE = { '': 'pending', done: 'done', skip: 'skip', open: 'open' };
 
-const phaseRow = (entry, onCheck, onReset) => {
+const chipFor = (entry, onChipQa) => {
+  if (entry.action.kind === 'link') {
+    const chip = el('a', 'chip link', entry.action.label);
+    // The url came from the server and was already filtered to http(s); the rel
+    // is what keeps the tracker from reaching back into the page under test.
+    chip.href = entry.action.url;
+    chip.target = '_blank';
+    chip.rel = 'noreferrer noopener';
+    chip.append(outIcon('icon', '#7a7a7a'));
+    return chip;
+  }
+
+  if (entry.action.kind === 'qa') {
+    const chip = el('button', 'chip qa', 'test');
+    chip.type = 'button';
+    chip.append(icon({ className: 'icon', size: 10, stroke: '#2b6b2b', width: 1.5, paths: ARROW_PATHS }));
+    chip.addEventListener('click', () => onChipQa());
+    return chip;
+  }
+
+  return null;
+};
+
+const phaseRow = (entry, index, peek, onCheck, onChipQa) => {
   const wrapper = el('div', `phase ${CLASS_FOR_STATE[entry.state]}`);
   wrapper.dataset.phase = entry.phase;
+  // The hover handler is delegated to the body, which survives a rebuild — so
+  // the row has to say where it sits in the list rather than close over it.
+  wrapper.dataset.index = String(index);
+  // Everything from the hovered row down is about to be cleared; showing that
+  // before the click is what replaces the confirmation dialog.
+  const fading = peek >= 0 && index >= peek;
+  if (fading) wrapper.classList.add('fading');
 
-  const row = el('div', 'row');
+  const gutter = el('span', 'gutter');
+  const box = el('span', 'box');
+  const recorded = entry.state !== '';
+  box.setAttribute('role', 'checkbox');
+  box.setAttribute('aria-checked', entry.state === 'done' ? 'true' : entry.state === 'open' ? 'mixed' : 'false');
+  box.title = recorded
+    ? 'click: clear this phase and every one after it'
+    : 'click: done · alt-click: skip';
 
-  const checkbox = el('input');
-  checkbox.type = 'checkbox';
-  checkbox.checked = entry.state === 'done';
   // A tick would read as "ran, nothing outstanding", which is the opposite of
-  // what `open` records; the dash is what the state actually means. Still
-  // enabled — closing an open phase by hand is a mutation the server accepts.
-  checkbox.indeterminate = entry.state === 'open';
-  // Undoing a closed phase is `reset`, which cascades — that is the button
-  // below, behind a confirmation, and never this checkbox. `open` stays
-  // clickable: a human may close it by hand, only never author it.
-  checkbox.disabled = !isSettable(entry);
-  checkbox.title = checkbox.disabled ? 'already recorded — use ⟲ to reopen' : 'click: done · alt-click: skip';
-  // Alt-click is a skip. The listener is on click rather than change because
-  // change carries no modifier keys, and the box is repainted from the server's
-  // answer anyway.
-  checkbox.addEventListener('click', (event) => {
+  // what `open` records; the dash is what the state actually means.
+  if (entry.state === 'done') box.append(icon({ className: 'mark', size: 11, stroke: '#fff', width: 2, paths: TICK_PATHS }));
+  else if (entry.state === 'open') box.append(icon({ className: 'mark', size: 9, stroke: '#a8760a', width: 2, paths: DASH_PATHS }));
+
+  // Alt-click is a skip, so the listener is on click rather than change: change
+  // carries no modifier keys. `open` is clickable like the rest — a human may
+  // close it by hand, only never author it.
+  box.addEventListener('click', (event) => {
     event.preventDefault();
-    onCheck(entry.phase, event.altKey ? 'skip' : 'done');
+    if (recorded) onCheck(entry.phase, 'reset');
+    else onCheck(entry.phase, event.altKey ? 'skip' : 'done');
   });
 
-  const name = el('span', 'name', entry.phase);
+  gutter.append(box, el('span', 'rail'));
 
-  row.append(checkbox, name);
+  const main = el('div', 'main');
+  const row = el('div', 'row');
+  row.append(el('span', 'name', entry.phase));
   if (entry.state === 'skip') row.append(el('span', 'badge skipped', 'skipped'));
   if (entry.state === 'open') row.append(el('span', 'badge open', 'open'));
 
-  // Nothing to undo on a phase the journal has never recorded — and offering it
-  // would still raise a confirmation naming every phase after it.
-  if (entry.state !== '') {
-    const reset = el('button', 'reset', '⟲');
-    reset.type = 'button';
-    reset.title = `reset ${entry.phase} and everything after it`;
-    reset.addEventListener('click', () => onReset(entry.phase));
-    row.append(reset);
+  if (entry.action) {
+    const chip = chipFor(entry, onChipQa);
+    if (chip) row.append(chip);
   }
 
-  wrapper.append(row);
+  main.append(row);
 
   // `open` means the phase ran and left something outstanding, and the detail is
   // the whole reason it is not done — it goes on the row, not in a tooltip.
-  if (entry.state === 'open' && entry.detail) wrapper.append(el('div', 'detail', entry.detail));
-  else if (entry.state === 'skip' && entry.detail) wrapper.append(el('div', 'meta', entry.detail));
+  if (entry.state === 'open' && entry.detail) main.append(el('div', 'detail', entry.detail));
+  else if (entry.state === 'skip' && entry.detail) main.append(el('div', 'meta', entry.detail));
 
   if (entry.by || entry.ts) {
     const stamp = [entry.by, entry.ts].filter(Boolean).join(' · ');
     row.title = stamp;
   }
 
+  wrapper.append(gutter, main);
   return wrapper;
 };
 
-export const createPanel = ({ onCheck, onReset }) => {
+const stageCaption = (group) => {
+  const caption = el('div', 'stage');
+  caption.append(
+    el('span', 'stage-name', group.stage),
+    el('span', 'stage-rule'),
+    el('span', 'stage-tally', `${group.closed}/${group.total}`),
+  );
+  return caption;
+};
+
+// The one line under the list, and the peek owns it while there is one: how far
+// the click reaches is the thing worth reading at that moment.
+const hintText = (state, peek) => {
+  if (peek >= 0) {
+    const count = state.phases.length - peek;
+    return `clears ${count} ${count === 1 ? 'phase' : 'phases'}, from ${state.phases[peek].phase}`;
+  }
+  if (!hasRecords(state.phases)) return 'no records yet';
+  if (state.next) return `next: ${state.next}`;
+  // Only the count the header already shows, read the other way round — no
+  // opinion here about which phase would be next if one were left.
+  if (closedCount(state.phases) === state.phases.length) return 'all closed';
+  return '';
+};
+
+export const createPanel = ({ onCheck, onChipQa }) => {
   const host = el('div');
   host.id = HOST_ID;
   // Closed so a script elsewhere on the page cannot reach shadowRoot to forge
@@ -92,7 +177,14 @@ export const createPanel = ({ onCheck, onReset }) => {
   // clickable button inside a clickable div would fire both listeners.
   const head = el('button', 'head');
   head.type = 'button';
-  const task = el('span', 'task');
+  // Two elements for one key, because whether it links anywhere depends on a
+  // site the developer may never have configured, and swapping an <a> for a
+  // <span> on every render would rebuild the header under the drag handle.
+  const taskText = el('span', 'task');
+  const taskLink = el('a', 'task');
+  taskLink.target = '_blank';
+  taskLink.rel = 'noreferrer noopener';
+  const taskOut = outIcon('icon', '#9a9a9a');
   const round = el('span', 'round');
   const count = el('span', 'count');
   const chevron = el('span', 'chevron', '–');
@@ -104,10 +196,15 @@ export const createPanel = ({ onCheck, onReset }) => {
   foot.hidden = true;
   let noticeText = '';
 
+  // What the panel was last told, kept because the panel repaints on its own
+  // when the pointer moves — the peek is nobody else's business.
+  let current = null;
+  let href = '';
+  let peek = -1;
+
   // The payload the body currently shows, as JSON. Two consecutive polls almost
   // always carry the same one, and rebuilding the rows throws away whatever had
-  // the keyboard focus — including a ⟲, which is only visible at all for as long
-  // as `.reset:focus` holds.
+  // the keyboard focus.
   let rendered = null;
 
   const applyCollapsed = () => {
@@ -116,7 +213,7 @@ export const createPanel = ({ onCheck, onReset }) => {
     panel.classList.toggle('collapsed', collapsed);
     head.setAttribute('aria-label', collapsed ? 'expand' : 'collapse');
     chevron.textContent = collapsed ? '🧭' : '–';
-    head.title = collapsed ? `${task.textContent} — ${count.textContent}` : '';
+    head.title = collapsed ? `${taskText.textContent} — ${count.textContent}` : '';
   };
 
   const drag = makeDraggable(panel, head);
@@ -129,48 +226,113 @@ export const createPanel = ({ onCheck, onReset }) => {
     applyCollapsed();
   });
 
-  head.append(task, round, count, chevron);
+  taskLink.addEventListener('click', (event) => {
+    // The key sits inside the collapse button, so its click has to stop here or
+    // following the link would fold the panel on the way out. A drag that ended
+    // on the key is not a click on it either.
+    event.stopPropagation();
+    if (drag.moved()) event.preventDefault();
+  });
+
+  const paint = () => {
+    if (!current) return;
+
+    const key = current.task;
+    taskText.textContent = key;
+    taskLink.textContent = key;
+    taskLink.href = href;
+    taskLink.hidden = href === '';
+    taskText.hidden = href !== '';
+    // The icon is an <svg>, and `hidden` is an HTMLElement property — assigning
+    // it there sets nothing the stylesheet can see.
+    if (href === '') taskOut.setAttribute('hidden', '');
+    else taskOut.removeAttribute('hidden');
+
+    // A task that has been round the pipeline more than once is important
+    // context; round 1 is the default and needs no badge.
+    round.textContent = current.round > 1 ? `round ${current.round}` : '';
+    round.hidden = current.round <= 1;
+    count.textContent = `${closedCount(current.phases)}/${current.phases.length}`;
+
+    // A row the server has since cleared cannot be dimming anything: the pointer
+    // is still over it, but there is nothing left there to clear.
+    const at = peek >= 0 && current.phases[peek]?.state !== '' ? peek : -1;
+
+    const payload = JSON.stringify({ state: current, peek: at, href });
+    if (payload !== rendered) {
+      rendered = payload;
+      const scrollTop = body.scrollTop;
+      body.replaceChildren();
+
+      let index = 0;
+      for (const group of groupByStage(current.phases)) {
+        // A stage the server left empty gets no caption — a rule and a tally
+        // over a nameless group would be a heading for nothing.
+        if (group.stage) body.append(stageCaption(group));
+        for (const entry of group.phases) {
+          body.append(phaseRow(entry, index, at, onCheck, onChipQa));
+          index += 1;
+        }
+      }
+
+      const hint = hintText(current, at);
+      if (hint) body.append(el('div', 'hint', hint));
+      body.scrollTop = scrollTop;
+    } else {
+      // The rebuild is what normally clears a row's error; without one, the
+      // same wiping has to happen by hand or a failed click's message would
+      // outlive every explanation the server has since given.
+      for (const stale of body.querySelectorAll('.error')) stale.remove();
+    }
+
+    applyCollapsed();
+  };
+
+  const setPeek = (next) => {
+    if (next === peek) return;
+    peek = next;
+    paint();
+  };
+
+  // Delegated to the body rather than bound per row: a repaint replaces every
+  // row, and a listener on the node the pointer is over would go with it.
+  body.addEventListener('mouseover', (event) => {
+    const row = event.target.closest?.('.phase');
+    if (!row) {
+      setPeek(-1);
+      return;
+    }
+    const index = Number(row.dataset.index);
+    const entry = current?.phases[index];
+    setPeek(entry && entry.state !== '' ? index : -1);
+  });
+
+  body.addEventListener('mouseleave', () => setPeek(-1));
+
+  head.append(taskText, taskLink, taskOut, round, count, chevron);
   panel.append(head, body, foot);
   root.append(style, panel);
   document.documentElement.append(host);
 
   return {
-    render(state) {
-      task.textContent = state.task;
-      // A task that has been round the pipeline more than once is important
-      // context; round 1 is the default and needs no badge.
-      round.textContent = state.round > 1 ? `round ${state.round}` : '';
-      round.hidden = state.round <= 1;
-      count.textContent = `${closedCount(state.phases)}/${state.phases.length}`;
-
-      const payload = JSON.stringify(state);
-      if (payload !== rendered) {
-        rendered = payload;
-        const scrollTop = body.scrollTop;
-        body.replaceChildren();
-        for (const entry of state.phases) body.append(phaseRow(entry, onCheck, onReset));
-        if (!hasRecords(state.phases)) body.append(el('div', 'empty', 'no records yet'));
-        else if (state.next) body.append(el('div', 'empty', `next: ${state.next}`));
-        body.scrollTop = scrollTop;
-      } else {
-        // The rebuild is what normally clears a row's error; without one, the
-        // same wiping has to happen by hand or a failed click's message would
-        // outlive every explanation the server has since given.
-        for (const stale of body.querySelectorAll('.error')) stale.remove();
-      }
-
-      applyCollapsed();
+    render(state, link) {
+      current = state;
+      // The site comes from the developer's own configuration, but it reaches
+      // this href through storage and a message, and a scheme-less one would
+      // resolve against the page under test.
+      href = safeHref(link);
+      paint();
     },
 
     // Attached to the row that failed, and wiped by the next render — the poll
     // five seconds later carries the server's own answer, which is the better
     // explanation of what actually happened.
     showError(phase, message) {
-      const row = body.querySelector(`.phase[data-phase="${CSS.escape(phase)}"]`);
-      if (!row) return;
-      const existing = row.querySelector('.error');
+      const main = body.querySelector(`.phase[data-phase="${CSS.escape(phase)}"] .main`);
+      if (!main) return;
+      const existing = main.querySelector('.error');
       if (existing) existing.remove();
-      row.append(el('div', 'error', message));
+      main.append(el('div', 'error', message));
       if (collapsed) {
         collapsed = false;
         applyCollapsed();

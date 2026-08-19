@@ -1,5 +1,8 @@
 // Lives inside the panel's shadow root, so nothing here can leak into the page
 // under test — and nothing the page ships can reach in and restyle the panel.
+//
+// Every value below is lifted from the approved artboard (`design/Staged.dc.html`)
+// rather than chosen here.
 
 export const PANEL_CSS = `
   :host { all: initial; }
@@ -16,7 +19,7 @@ export const PANEL_CSS = `
     left: 16px;
     bottom: 16px;
     z-index: 2147483646;
-    width: 320px;
+    width: 360px;
     max-width: calc(100vw - 32px);
     max-height: 70vh;
     display: flex;
@@ -52,7 +55,18 @@ export const PANEL_CSS = `
 
   .panel.dragging .head { cursor: grabbing; }
 
+  /* Drawn glyphs must not be squeezed by the flex row they sit in. */
+  .icon { flex: none; }
+
   .task { font-weight: 600; }
+  a.task {
+    color: #1a1a1a;
+    text-decoration: underline;
+    text-decoration-color: #b8b8b8;
+    text-underline-offset: 2px;
+  }
+  a.task:hover { color: #000; }
+
   .round {
     font-size: 12px;
     padding: 0 5px;
@@ -75,22 +89,78 @@ export const PANEL_CSS = `
   }
   .panel.collapsed .task,
   .panel.collapsed .round,
+  .panel.collapsed .head .icon,
   .panel.collapsed .count { display: none; }
   .panel.collapsed .chevron { font-size: 20px; }
 
-  .body { overflow-y: auto; padding: 5px 0; }
+  .body { overflow-y: auto; padding: 3px 0; }
 
-  .phase { padding: 3px 12px; }
+  /* The caption's rule fills whatever the name and the tally leave, so a long
+     stage name shortens the line instead of wrapping it. */
+  .stage {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px 2px;
+  }
+  .stage-name {
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #8a8a85;
+  }
+  .stage-rule { height: 1px; flex: 1; background: #ededed; }
+  .stage-tally { font-size: 12px; color: #a6a6a6; }
+
+  .phase { display: flex; gap: 9px; padding: 3px 12px; }
+  .phase:hover { background: #f6f6f6; }
+
+  /* The rail is what makes the list read as a pipeline: it takes whatever height
+     the row's text leaves, so a row with a detail under it grows its own link
+     down to the next box. */
+  .gutter {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 15px;
+  }
+  .box {
+    box-sizing: border-box;
+    width: 15px;
+    height: 15px;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #b4b4b4;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .phase.done .box { background: #3f7a3f; border-color: #3f7a3f; }
+  .phase.open .box { background: #fff8e6; border-color: #d99b00; }
+
+  .rail {
+    flex: 1;
+    width: 2px;
+    margin-top: 3px;
+    border-radius: 1px;
+    background: #ededed;
+  }
+  .phase.done .rail,
+  .phase.skip .rail { background: #cfe0cf; }
+  .phase.open .rail { background: #f0dfae; }
+
+  .main { flex: 1; min-width: 0; padding-bottom: 3px; }
   .row { display: flex; align-items: baseline; gap: 7px; }
-  .row input { margin: 0; }
-  .row input[type="checkbox"] { width: 15px; height: 15px; }
 
   .name { flex: 1; }
   .phase.pending .name { color: #888; }
   .phase.skip .name { text-decoration: line-through; color: #999; }
-  .phase.open input[type="checkbox"] { outline: 2px solid #d99b00; outline-offset: 1px; }
 
   .badge {
+    flex: none;
     font-size: 12px;
     padding: 0 5px;
     border-radius: 3px;
@@ -99,32 +169,55 @@ export const PANEL_CSS = `
   }
   .badge.open { background: #fff3cd; color: #7a5c00; }
 
-  /* Reset is destructive and cascades, so it stays a quiet glyph until the row
-     is hovered rather than a button competing with the checkbox. */
-  .reset {
-    padding: 0 4px;
+  /* Where the row goes when it is followed, which is never the panel: a chip is
+     a real link or a real button, and the box beside it is what writes. */
+  .chip {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
     font: inherit;
-    color: #999;
-    background: none;
-    border: 0;
-    border-radius: 3px;
-    cursor: pointer;
-    opacity: 0;
-  }
-  .phase:hover .reset,
-  .reset:focus { opacity: 1; }
-  .reset:hover { color: #b00020; background: #f6f6f6; }
-
-  .detail {
-    margin-left: 22px;
-    color: #7a5c00;
     font-size: 12px;
-    white-space: pre-wrap;
+    border-radius: 4px;
+    text-decoration: none;
+    cursor: pointer;
   }
-  .meta { margin-left: 22px; color: #888; font-size: 12px; }
-  .error { margin-left: 22px; color: #b00020; font-size: 12px; }
+  .chip.link {
+    border: 1px solid #d8d8d8;
+    color: #4a4a4a;
+    background: #f7f7f7;
+  }
+  .chip.link:hover { background: #ececec; border-color: #b8b8b8; }
+  .chip.qa {
+    border: 1px solid #c4d8c4;
+    color: #2b6b2b;
+    background: #f2f8f2;
+  }
+  .chip.qa:hover { background: #e8f2e8; border-color: #a9c9a9; }
 
-  .empty { padding: 4px 12px 8px; color: #888; font-size: 12px; }
+  /* The extent of the cascade the next click would run, shown on the rows it
+     would reach. Set after the state rules, which it deliberately overrides at
+     equal specificity. */
+  .phase.fading .name { color: #b9b9b9; text-decoration: none; }
+  .phase.fading .box { background: #fff; border-color: #d0d0d0; }
+  .phase.fading .rail { background: #ededed; }
+  /* Hidden by visibility rather than display: the panel is anchored to the
+     bottom of the window, so a peek that removed a detail line would slide the
+     whole list under the pointer and hand the hover to another row. */
+  .phase.fading .mark,
+  .phase.fading .badge,
+  .phase.fading .detail,
+  .phase.fading .meta,
+  .phase.fading .error { visibility: hidden; }
+
+  .detail { color: #7a5c00; font-size: 12px; white-space: pre-wrap; }
+  .meta { color: #888; font-size: 12px; }
+  .error { color: #b00020; font-size: 12px; }
+
+  /* One line under the list, carrying whichever of "what is next" and "what the
+     click would clear" applies. */
+  .hint { padding: 5px 12px 8px; color: #888; font-size: 12px; }
 
   /* Below every row rather than beside one, because what goes here belongs to
      the whole read: the panel above it is the last journal that arrived. */
