@@ -16,7 +16,7 @@
   "content_scripts": [
     {
       "matches": ["http://localhost/*", "http://127.0.0.1/*"],
-      "js": ["qa/boot.js"],
+      "js": ["qa/boot.js", "phases/boot.js"],
       "run_at": "document_idle"
     }
   ],
