@@ -8,6 +8,7 @@ import { trackedGroups, keyForTab } from './chrome/groups.js';
 import { rememberActiveTab, restoreFocus } from './chrome/focus.js';
 import { QA_MESSAGE } from './qa/config.js';
 import { TASK_KEY_MESSAGE } from './lib/task-key.js';
+import { TASK_LINK_MESSAGE, taskUrl } from './lib/task-link.js';
 import { call } from './qa/client.js';
 import { PHASE_MESSAGE } from './phases/config.js';
 import { call as callPhaseServer } from './phases/client.js';
@@ -105,6 +106,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     callPhaseServer(message)
       .then(sendResponse)
       .catch((e) => sendResponse({ error: String(e?.message ?? e) }));
+    return true;
+  }
+
+  if (message?.type === TASK_LINK_MESSAGE) {
+    readSite()
+      .then((site) => sendResponse(taskUrl(site, message.key)))
+      // A missing site is not an error worth logging, and neither is a storage
+      // read failing while the worker is being torn down — the panel treats an
+      // empty answer as "show the key as text".
+      .catch(() => sendResponse(''));
     return true;
   }
 
