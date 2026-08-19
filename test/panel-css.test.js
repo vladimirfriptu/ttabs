@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { PANEL_CSS } from '../extension/phases/styles.js';
+import { PANEL_CSS as QA_WIDGET_CSS } from '../extension/qa/styles.js';
 
 // The phase list and the drilled-in checklist live in one shadow root and share
 // one stylesheet, so every class name belongs to one of two vocabularies. A bare
@@ -104,8 +105,8 @@ const SHARED_CLASSES = ['row', 'badge', 'icon', 'error'];
 // kind that matches an element on the strength of that one name alone, wherever
 // in the shadow root it sits. A compound with two (`.case.passed`, `.panel.wide`)
 // cannot cross screens, since no element carries both vocabularies' names.
-const singleClassSelectors = () => {
-  const withoutComments = PANEL_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+const singleClassSelectors = (css) => {
+  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const found = new Set();
 
   for (const [, prelude] of withoutComments.matchAll(/([^{}]+)\{/g)) {
@@ -134,6 +135,56 @@ test('the two screens share no class name that is not declared shared', () => {
 
 test('every bare single-class rule names a class one of the screens sets', () => {
   const known = new Set([...PHASE_CLASSES, ...QA_CLASSES, ...SHARED_CLASSES]);
-  const unknown = singleClassSelectors().filter((name) => !known.has(name));
+  const unknown = singleClassSelectors(PANEL_CSS).filter((name) => !known.has(name));
   assert.deepEqual(unknown, [], 'a rule for a class no screen sets is either dead or a name nobody declared');
+});
+
+// The standalone QA widget's stylesheet, checked the same way for the same
+// reason. Only the second check transfers: that widget's shadow root holds one
+// screen, so there are no two vocabularies to collide — but a rule outliving the
+// element it was written for is just as invisible there. The note field was
+// restyled from a `.note` box to a `.quoted` line, and nothing but this would
+// have said whether the old rule went and the new one arrived.
+//
+// Hand-written for the reason the lists above are: adding a class has to be a
+// deliberate edit in one place.
+
+// Set by extension/qa/panel.js.
+const QA_WIDGET_CLASSES = [
+  'panel',
+  'collapsed',
+  'dragging',
+  'head',
+  'task',
+  'count',
+  'chevron',
+  'body',
+  'foot',
+  'area',
+  'case',
+  'new',
+  'updated',
+  'unchanged',
+  'outdated',
+  'row',
+  'title',
+  'badge',
+  'details',
+  'expected',
+  'quoted',
+  'comment-text',
+  'discrepancies',
+  'discrepancy',
+  'summary',
+  'meta',
+  'error',
+  'finish-error',
+  'done',
+  'ended',
+];
+
+test('every bare single-class rule in the QA widget names a class its panel sets', () => {
+  const known = new Set(QA_WIDGET_CLASSES);
+  const unknown = singleClassSelectors(QA_WIDGET_CSS).filter((name) => !known.has(name));
+  assert.deepEqual(unknown, [], 'a rule for a class the panel never sets is either dead or a name nobody declared');
 });

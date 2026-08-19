@@ -4,7 +4,6 @@ import assert from 'node:assert';
 import {
   normalizeState,
   applyAction,
-  cascadeFrom,
   closedCount,
   hasRecords,
   groupByStage,
@@ -68,13 +67,6 @@ test('applyAction replaces one phase and leaves the others alone', () => {
   assert.strictEqual(state.phases[3].state, 'open');
   assert.strictEqual(next.phases[0].state, 'done');
   assert.strictEqual(next.task, 'ACME-1234');
-});
-
-test('cascadeFrom lists every later phase in the server order', () => {
-  const { phases } = normalizeState(payload());
-  assert.deepStrictEqual(cascadeFrom(phases, 'dev'), ['checks', 'crit']);
-  assert.deepStrictEqual(cascadeFrom(phases, 'crit'), []);
-  assert.deepStrictEqual(cascadeFrom(phases, 'nope'), []);
 });
 
 test('closedCount counts done and skip, not open', () => {

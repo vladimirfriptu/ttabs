@@ -70,12 +70,6 @@ export const applyAction = (state, phase, action) => ({
   phases: state.phases.map((p) => (p.phase === phase ? { ...p, state: action } : p)),
 });
 
-export const cascadeFrom = (phases, phase) => {
-  const at = phases.findIndex((p) => p.phase === phase);
-  if (at < 0) return [];
-  return phases.slice(at + 1).map((p) => p.phase);
-};
-
 export const closedCount = (phases) =>
   phases.filter((p) => p.state === 'done' || p.state === 'skip').length;
 
