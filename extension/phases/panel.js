@@ -42,8 +42,8 @@ const TICK_PATHS = ['M2.5 6.5 5 9l4.5-6'];
 const DASH_PATHS = ['M2.5 6h7'];
 const ARROW_PATHS = ['M4.5 2.5 8 6l-3.5 3.5'];
 
-const outIcon = (className, stroke) =>
-  icon({ className, size: 10, stroke, width: 1.5, paths: OUT_PATHS });
+const outIcon = ({ className, stroke, size, width }) =>
+  icon({ className, size, stroke, width, paths: OUT_PATHS });
 
 const CLASS_FOR_STATE = { '': 'pending', done: 'done', skip: 'skip', open: 'open' };
 
@@ -55,7 +55,7 @@ const chipFor = (entry, onChipQa) => {
     chip.href = entry.action.url;
     chip.target = '_blank';
     chip.rel = 'noreferrer noopener';
-    chip.append(outIcon('icon', '#7a7a7a'));
+    chip.append(outIcon({ className: 'icon', stroke: '#7a7a7a', size: 10, width: 1.5 }));
     return chip;
   }
 
@@ -86,6 +86,9 @@ const phaseRow = (entry, index, peek, onCheck, onChipQa) => {
   const recorded = entry.state !== '';
   box.setAttribute('role', 'checkbox');
   box.setAttribute('aria-checked', entry.state === 'done' ? 'true' : entry.state === 'open' ? 'mixed' : 'false');
+  // A span says nothing to the tab order on its own, and this is the only thing
+  // in the list that writes — the reset button that used to be focusable is gone.
+  box.tabIndex = 0;
   box.title = recorded
     ? 'click: clear this phase and every one after it'
     : 'click: done · alt-click: skip';
@@ -95,13 +98,24 @@ const phaseRow = (entry, index, peek, onCheck, onChipQa) => {
   if (entry.state === 'done') box.append(icon({ className: 'mark', size: 11, stroke: '#fff', width: 2, paths: TICK_PATHS }));
   else if (entry.state === 'open') box.append(icon({ className: 'mark', size: 9, stroke: '#a8760a', width: 2, paths: DASH_PATHS }));
 
-  // Alt-click is a skip, so the listener is on click rather than change: change
-  // carries no modifier keys. `open` is clickable like the rest — a human may
-  // close it by hand, only never author it.
-  box.addEventListener('click', (event) => {
-    event.preventDefault();
+  // Alt is a skip, so this reads the modifier off whatever event arrived rather
+  // than off a change event, which carries none. `open` is settable like the
+  // rest — a human may close it by hand, only never author it.
+  const toggle = (event) => {
     if (recorded) onCheck(entry.phase, 'reset');
     else onCheck(entry.phase, event.altKey ? 'skip' : 'done');
+  };
+
+  box.addEventListener('click', (event) => {
+    event.preventDefault();
+    toggle(event);
+  });
+
+  box.addEventListener('keydown', (event) => {
+    if (event.key !== ' ' && event.key !== 'Enter') return;
+    // Space on a focused span scrolls the page the panel is floating over.
+    event.preventDefault();
+    toggle(event);
   });
 
   gutter.append(box, el('span', 'rail'));
@@ -172,11 +186,12 @@ export const createPanel = ({ onCheck, onChipQa }) => {
 
   const style = el('style', null, PANEL_CSS);
   const panel = el('div', 'panel');
-  // The header itself is the collapse control (a real button, so it is
-  // keyboard-reachable) rather than a div wrapping its own button — nesting a
-  // clickable button inside a clickable div would fire both listeners.
-  const head = el('button', 'head');
-  head.type = 'button';
+  // The header is a plain row that drags, and the collapse control is a real
+  // button inside it taking everything the key and the round badge leave — the
+  // key is a link, and interactive content cannot be nested inside a button.
+  const head = el('div', 'head');
+  const fold = el('button', 'fold');
+  fold.type = 'button';
   // Two elements for one key, because whether it links anywhere depends on a
   // site the developer may never have configured, and swapping an <a> for a
   // <span> on every render would rebuild the header under the drag handle.
@@ -184,7 +199,7 @@ export const createPanel = ({ onCheck, onChipQa }) => {
   const taskLink = el('a', 'task');
   taskLink.target = '_blank';
   taskLink.rel = 'noreferrer noopener';
-  const taskOut = outIcon('icon', '#9a9a9a');
+  const taskOut = outIcon({ className: 'icon', stroke: '#9a9a9a', size: 11, width: 1.4 });
   const round = el('span', 'round');
   const count = el('span', 'count');
   const chevron = el('span', 'chevron', '–');
@@ -211,25 +226,46 @@ export const createPanel = ({ onCheck, onChipQa }) => {
     body.hidden = collapsed;
     foot.hidden = collapsed || noticeText === '';
     panel.classList.toggle('collapsed', collapsed);
-    head.setAttribute('aria-label', collapsed ? 'expand' : 'collapse');
+    fold.setAttribute('aria-label', collapsed ? 'expand' : 'collapse');
     chevron.textContent = collapsed ? '🧭' : '–';
-    head.title = collapsed ? `${taskText.textContent} — ${count.textContent}` : '';
+    fold.title = collapsed ? `${taskText.textContent} — ${count.textContent}` : '';
   };
 
   const drag = makeDraggable(panel, head);
 
-  head.addEventListener('click', () => {
+  // Which child of the header the press went down on. The click that follows
+  // does not always name it: measured in Chrome, a header that is also a
+  // pointer-capturing drag handle receives the pointerup and the click itself,
+  // whichever child the pointer was actually over. So the header listens once,
+  // for everything, and reads the intent off the press.
+  let pressedKey = false;
+
+  head.addEventListener('pointerdown', (event) => {
+    pressedKey = taskLink.contains(event.target);
+  });
+
+  // One listener for the whole header, the fold button included — its click
+  // bubbles here, which is what makes Enter and Space on it collapse the panel.
+  head.addEventListener('click', (event) => {
     // The header is the drag handle as well as the collapse control, and a drag
     // ends in a click on it — without this, moving the panel would fold it too.
     if (drag.moved()) return;
+
+    if (pressedKey) {
+      // The press was on the key but the click did not reach it, so the browser
+      // is not following the link — forward it, and let the anchor's own
+      // listener stop the forwarded click from folding the panel.
+      if (!taskLink.contains(event.target)) taskLink.click();
+      return;
+    }
+
     collapsed = !collapsed;
     applyCollapsed();
   });
 
   taskLink.addEventListener('click', (event) => {
-    // The key sits inside the collapse button, so its click has to stop here or
-    // following the link would fold the panel on the way out. A drag that ended
-    // on the key is not a click on it either.
+    // Following the link is not folding the panel, and a drag that ended on the
+    // key is not a click on it either.
     event.stopPropagation();
     if (drag.moved()) event.preventDefault();
   });
@@ -254,9 +290,12 @@ export const createPanel = ({ onCheck, onChipQa }) => {
     round.hidden = current.round <= 1;
     count.textContent = `${closedCount(current.phases)}/${current.phases.length}`;
 
-    // A row the server has since cleared cannot be dimming anything: the pointer
-    // is still over it, but there is nothing left there to clear.
-    const at = peek >= 0 && current.phases[peek]?.state !== '' ? peek : -1;
+    // The pointer may still be over a row the answer in hand no longer supports:
+    // the server has since cleared that phase, or dropped it from the list
+    // altogether. Either way there is nothing left there to clear, and an index
+    // past the end would take hintText down with it.
+    const peeked = peek >= 0 ? current.phases[peek] : undefined;
+    const at = peeked && peeked.state !== '' ? peek : -1;
 
     const payload = JSON.stringify({ state: current, peek: at, href });
     if (payload !== rendered) {
@@ -275,8 +314,10 @@ export const createPanel = ({ onCheck, onChipQa }) => {
         }
       }
 
-      const hint = hintText(current, at);
-      if (hint) body.append(el('div', 'hint', hint));
+      // Always appended, empty text included: the panel is anchored to the
+      // bottom of the window, so a hint line that came and went would push the
+      // whole panel up and down under the pointer.
+      body.append(el('div', 'hint', hintText(current, at)));
       body.scrollTop = scrollTop;
     } else {
       // The rebuild is what normally clears a row's error; without one, the
@@ -309,7 +350,8 @@ export const createPanel = ({ onCheck, onChipQa }) => {
 
   body.addEventListener('mouseleave', () => setPeek(-1));
 
-  head.append(taskText, taskLink, taskOut, round, count, chevron);
+  fold.append(count, chevron);
+  head.append(taskText, taskLink, taskOut, round, fold);
   panel.append(head, body, foot);
   root.append(style, panel);
   document.documentElement.append(host);

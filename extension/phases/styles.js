@@ -33,17 +33,13 @@ export const PANEL_CSS = `
   }
 
   .head {
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     width: 100%;
     gap: 7px;
     padding: 9px 12px;
-    border: 0;
     border-bottom: 1px solid #e6e6e6;
-    background: none;
-    font: inherit;
-    color: inherit;
-    text-align: left;
     /* The header both collapses the panel and drags it; the grab cursor is the
        only hint that the second is possible. */
     cursor: grab;
@@ -54,6 +50,25 @@ export const PANEL_CSS = `
   }
 
   .panel.dragging .head { cursor: grabbing; }
+
+  /* Takes everything the key and the round badge leave, so clicking the empty
+     part of the header still collapses the panel — which is what the header
+     being one big button used to give. */
+  .fold {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: inherit;
+  }
 
   /* Drawn glyphs must not be squeezed by the flex row they sit in. */
   .icon { flex: none; }
@@ -74,7 +89,7 @@ export const PANEL_CSS = `
     background: #ede4ff;
     color: #4a2a86;
   }
-  .count { color: #777; margin-left: auto; }
+  .count { color: #777; }
   .chevron { line-height: 1; color: #777; }
 
   /* Collapsed, the header is the whole panel: a small square icon-only button,
@@ -84,9 +99,9 @@ export const PANEL_CSS = `
     width: 44px;
     height: 44px;
     padding: 0;
-    justify-content: center;
     border-bottom: 0;
   }
+  .panel.collapsed .fold { height: 100%; justify-content: center; }
   .panel.collapsed .task,
   .panel.collapsed .round,
   .panel.collapsed .head .icon,
@@ -137,6 +152,12 @@ export const PANEL_CSS = `
     border-radius: 3px;
     background: #fff;
     cursor: pointer;
+  }
+  /* The only thing in the list that writes, and now the only focusable thing in
+     the panel besides the header — without a ring, a keyboard user is blind. */
+  .box:focus-visible {
+    outline: 2px solid #3f7a3f;
+    outline-offset: 2px;
   }
   .phase.done .box { background: #3f7a3f; border-color: #3f7a3f; }
   .phase.open .box { background: #fff8e6; border-color: #d99b00; }
@@ -204,7 +225,9 @@ export const PANEL_CSS = `
   .phase.fading .rail { background: #ededed; }
   /* Hidden by visibility rather than display: the panel is anchored to the
      bottom of the window, so a peek that removed a detail line would slide the
-     whole list under the pointer and hand the hover to another row. */
+     whole list under the pointer and hand the hover to another row.
+     .error is in the list on purpose — a dimmed row is announcing it is about
+     to be cleared, and a failed click's message on it is already history. */
   .phase.fading .mark,
   .phase.fading .badge,
   .phase.fading .detail,
@@ -216,8 +239,16 @@ export const PANEL_CSS = `
   .error { color: #b00020; font-size: 12px; }
 
   /* One line under the list, carrying whichever of "what is next" and "what the
-     click would clear" applies. */
-  .hint { padding: 5px 12px 8px; color: #888; font-size: 12px; }
+     click would clear" applies — and holding a line's worth of height even when
+     it carries neither, because the panel grows upwards from the bottom of the
+     window and a line that appeared with the peek would move the list under the
+     pointer. */
+  .hint {
+    padding: 5px 12px 8px;
+    min-height: 1.4em;
+    color: #888;
+    font-size: 12px;
+  }
 
   /* Below every row rather than beside one, because what goes here belongs to
      the whole read: the panel above it is the last journal that arrived. */

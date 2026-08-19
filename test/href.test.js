@@ -31,6 +31,14 @@ test('data: is refused', () => {
   assert.strictEqual(safeHref('data:text/html,<script>alert(1)</script>'), '');
 });
 
+// The rule is a whitelist of two exact protocols, not a prefix test: a scheme
+// that merely starts with "http" is not one of them.
+test('only http: and https: pass — not a scheme that looks like one', () => {
+  assert.strictEqual(safeHref('httpevil://x/browse/ACME-1'), '');
+  assert.strictEqual(safeHref('mailto:someone@acme.example'), '');
+  assert.strictEqual(safeHref('file:///etc/passwd'), '');
+});
+
 test('a protocol-relative url is refused — there is no base to resolve it against', () => {
   assert.strictEqual(safeHref('//evil.example/browse/ACME-1'), '');
 });
