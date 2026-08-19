@@ -64,6 +64,46 @@ answered. It says nothing at the default level, since most tasks never run a
 checklist server and a widget should not narrate its idleness into someone
 else's console.
 
+## Phase panel
+
+A second floating panel, bottom-left this time (the QA checklist keeps
+bottom-right, and the two can be open together), lists a task's pipeline
+phases whenever the tab is on `localhost` inside a task group. It reads and
+writes a local phase server on port `47824`. With nothing listening there the
+panel never appears, quietly — it retries once a minute rather than giving up
+for good, since the server does not survive a reboot and nothing brings it
+back automatically.
+
+Serving that journal is, like the QA server, somebody else's job: the
+extension only talks to whatever answers on that port, on a small fixed
+protocol it did not design.
+
+Each phase is in one of four states: recorded (`done`), skipped, `open` — the
+phase ran and left something outstanding, and the panel shows why — or not yet
+reached. Clicking a phase's checkbox closes it; alt-click skips it instead.
+The `⟲` next to a phase resets it **and every phase after it**, behind a
+confirmation that names each one it is about to reopen.
+
+There is no way to untick a closed phase directly: reopening a phase cascades
+to everything downstream of it, so it is deliberately a `⟲` plus a
+confirmation rather than a second click on the same checkbox. The one
+exception is `open` — a human can close it by hand, they just cannot put it
+back into that state themselves.
+
+A `round N` badge appears in the header once a task has been through the
+pipeline more than once; round one shows nothing.
+
+When the panel is missing and a phase server is in fact running:
+
+1. **The tab isn't in a task's tab group.** Only a tab whose group carries a
+   recognisable key gets a panel at all.
+2. **The group title was renamed past recognition.** The panel needs a key in
+   the title exactly like the CLI does — see "Keep the key in the title" above.
+3. **The phase server isn't running.** The panel checks once a minute, so
+   starting it catches on within that window without reloading the tab.
+4. **The extension wasn't reloaded after editing `extension/`.** Press
+   *Reload* on the card in `chrome://extensions`.
+
 ## Install
 
 ```bash
