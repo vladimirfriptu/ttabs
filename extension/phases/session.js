@@ -20,6 +20,14 @@ export const startPhaseWatch = () => {
   let reading = false;
   let deadUntil = 0;
 
+  // Bumped every time the visible truth changes from a source other than the
+  // read/mutation currently in flight — a fresh render, a close, or the tab's
+  // key turning out to belong to a different task. A read or a mutation
+  // captures it before its await and compares after: a mismatch means someone
+  // else's answer already landed first, so this one is stale and must neither
+  // paint over it nor re-arm a timer that answer already re-armed.
+  let epoch = 0;
+
   // The last "why nothing is showing" reason printed for this tab, or null when
   // there is nothing to explain. Printed once per reason, and again only once
   // the reason changes, so a tab that sits outside a task group forever does not
@@ -35,6 +43,7 @@ export const startPhaseWatch = () => {
   };
 
   const close = () => {
+    epoch += 1;
     panel?.destroy();
     panel = null;
     state = null;
@@ -68,12 +77,22 @@ export const startPhaseWatch = () => {
     reading = true;
     try {
       await read();
+    } catch (e) {
+      // A timer callback reaches no catch of its own, so a bug anywhere in
+      // read() — not just its two guarded network calls — would otherwise take
+      // the whole widget down silently (no timer left armed while the tab is
+      // visible) and loudly, as an "Uncaught (in promise)" Chrome logs at the
+      // default console level regardless of the level filter.
+      note(`the phase widget hit an internal error — ${e.message}`);
+      schedule(POLL_MS);
     } finally {
       reading = false;
     }
   };
 
   const read = async () => {
+    let at = epoch;
+
     let tabKey;
     try {
       tabKey = await readTaskKey();
@@ -93,6 +112,10 @@ export const startPhaseWatch = () => {
       return;
     }
 
+    // A key that changed under us — the tab moved to another group — starts a
+    // new epoch too, so an answer already in flight for the old key cannot
+    // later paint itself over this task.
+    if (tabKey !== key) { epoch += 1; at = epoch; }
     key = tabKey;
 
     let next;
@@ -102,6 +125,12 @@ export const startPhaseWatch = () => {
       markDead(`cannot reach the phase server at ${PHASE_BASE} —`, e.message);
       return;
     }
+
+    // A mutation's answer can land while this GET is still in flight; that
+    // answer is fresher, so this read yields to it instead of overwriting it —
+    // and the mutation already rescheduled the timer, so there is nothing left
+    // to arm here.
+    if (epoch !== at) return;
 
     deadUntil = 0;
 
@@ -128,6 +157,7 @@ export const startPhaseWatch = () => {
   };
 
   const show = (next) => {
+    epoch += 1;
     state = next;
     if (!panel) panel = createPanel({ onCheck, onReset });
     panel.render(state);
@@ -136,11 +166,16 @@ export const startPhaseWatch = () => {
   const onCheck = async (phase, action) => {
     const previous = state;
     show(applyAction(state, phase, action));
+    const at = epoch;
 
     let answer;
     try {
       answer = await mutate(phase, { task: key, action });
     } catch (e) {
+      // A close or a fresher render since the optimistic tick means the panel
+      // — or the task it belongs to — has already moved on; reverting now
+      // would resurrect exactly what close() just took down.
+      if (epoch !== at) return;
       // Revert before re-rendering: the optimistic tick claimed something the
       // journal does not say, and the panel is the only place that claim exists.
       state = previous;
@@ -148,6 +183,10 @@ export const startPhaseWatch = () => {
       panel?.showError(phase, `not saved: ${e.message}`);
       return;
     }
+
+    // Same guard on the success path — a read or another mutation that landed
+    // first already replaced what this click touched.
+    if (epoch !== at) return;
 
     // The server's answer replaces the optimistic guess wholesale — it is the
     // journal after the fold, which may differ from the single field we flipped.
@@ -160,14 +199,18 @@ export const startPhaseWatch = () => {
     // confirmation names them, read off the canonical order in the response
     // rather than a list this widget keeps of its own.
     if (!window.confirm(resetWarning(state.phases, phase))) return;
+    const at = epoch;
 
     let answer;
     try {
       answer = await mutate(phase, { task: key, action: 'reset' });
     } catch (e) {
+      if (epoch !== at) return;
       panel?.showError(phase, `not reset: ${e.message}`);
       return;
     }
+
+    if (epoch !== at) return;
 
     show(answer);
     schedule(POLL_MS);
@@ -186,5 +229,8 @@ export const startPhaseWatch = () => {
     else poll();
   });
 
-  poll();
+  // A link opened straight into a background tab is hidden at document_idle
+  // too; a hidden tab costs nothing, so this waits for visibilitychange
+  // rather than firing one request just to be told to stop.
+  if (!document.hidden) poll();
 };
