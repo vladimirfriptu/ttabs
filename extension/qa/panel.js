@@ -28,7 +28,7 @@ const details = (item) => {
   return box;
 };
 
-const caseRow = (item, onToggle, foldOverrides, openComments, commentText, editedIds, onComment, onCommentCommit) => {
+const caseRow = (item, onToggle, foldOverrides, commentText, editedIds, onComment, onCommentCommit) => {
   const wrapper = el('div', `case ${item.status}`);
   wrapper.dataset.id = item.id;
 
@@ -47,19 +47,6 @@ const caseRow = (item, onToggle, foldOverrides, openComments, commentText, edite
 
   const title = el('button', 'title', item.title);
   const expanded = details(item);
-  // The map stores what `hidden` should be, so the default reads the same way:
-  // a finished case folds away, an unfinished one shows what to do.
-  const defaultCollapsed = item.passed;
-  expanded.hidden = foldOverrides.has(item.id) ? foldOverrides.get(item.id) : defaultCollapsed;
-  title.addEventListener('click', () => {
-    expanded.hidden = !expanded.hidden;
-    foldOverrides.set(item.id, expanded.hidden);
-    // Folding a case takes its comment field with it: a folded case shows the
-    // comment as text and nothing else, so leaving the field open would have
-    // it reappear on the next unfold with no way to have closed it.
-    if (expanded.hidden) openComments.delete(item.id);
-    syncComment();
-  });
 
   row.append(checkbox, title);
   if (item.status === 'new' || item.status === 'updated') {
@@ -76,33 +63,31 @@ const caseRow = (item, onToggle, foldOverrides, openComments, commentText, edite
   }
   const currentComment = () => (commentText.has(item.id) ? commentText.get(item.id) : item.comment);
 
-  const commentDisplay = el('div', 'comment-text');
-  const addComment = el('button', 'add-comment');
-  addComment.type = 'button';
-  const note = el('textarea', 'note');
+  const note = el('textarea', 'quoted');
+  note.rows = 1;
   note.placeholder = 'note…';
   note.value = currentComment();
+  const commentDisplay = el('div', 'comment-text');
 
-  // The three are mutually exclusive by construction rather than by three
-  // separate handlers agreeing with each other: an open field replaces the
-  // text it would otherwise duplicate, and a folded case offers no way in.
-  const syncComment = () => {
+  // A finished case folds away, an unfinished one shows what to do; the map
+  // stores what "folded" should be, so an override reads the same way.
+  let folded = foldOverrides.has(item.id) ? foldOverrides.get(item.id) : item.passed;
+
+  // Folded, a case shows the note as a line rather than a field: the fold hides
+  // what to do, never what was found.
+  const applyFold = () => {
     const value = currentComment();
-    const open = !expanded.hidden && openComments.has(item.id);
-
-    note.hidden = !open;
+    expanded.hidden = folded;
+    note.hidden = folded;
     commentDisplay.textContent = value;
-    commentDisplay.hidden = open || value.trim() === '';
-    addComment.textContent = value.trim() ? 'edit comment' : 'add comment';
-    addComment.hidden = expanded.hidden || open;
+    commentDisplay.hidden = !folded || value.trim() === '';
   };
-  syncComment();
+  applyFold();
 
-  addComment.addEventListener('click', () => {
-    openComments.add(item.id);
-    // Unhide before focusing — a hidden element cannot take focus.
-    syncComment();
-    note.focus();
+  title.addEventListener('click', () => {
+    folded = !folded;
+    foldOverrides.set(item.id, folded);
+    applyFold();
   });
 
   note.addEventListener('input', () => {
@@ -116,14 +101,14 @@ const caseRow = (item, onToggle, foldOverrides, openComments, commentText, edite
   // identical text, so only a field the developer actually edited here is
   // committed.
   //
-  // Losing focus must not close the field. The keep-alive rebuild necessarily
-  // takes focus off this node, and a field closed by that is a field rendered
-  // hidden — which focus() cannot restore. Only folding the case closes it.
+  // Losing focus must not fold the case either. The keep-alive rebuild
+  // necessarily takes focus off this node, and a field folded by that is a
+  // field rendered hidden — which focus() cannot restore.
   note.addEventListener('blur', () => {
     if (editedIds.has(item.id)) onCommentCommit(item.id, note.value);
   });
 
-  wrapper.append(row, expanded, commentDisplay, addComment, note);
+  wrapper.append(row, expanded, note, commentDisplay);
   return wrapper;
 };
 
@@ -165,7 +150,6 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
   // developer's explicit choice underneath them every 15 seconds.
   const foldOverrides = new Map();
 
-  const openComments = new Set();
   const commentText = new Map();
   const editedIds = new Set();
 
@@ -225,9 +209,6 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
       for (const id of foldOverrides.keys()) {
         if (!knownIds.has(id)) foldOverrides.delete(id);
       }
-      for (const id of openComments) {
-        if (!knownIds.has(id)) openComments.delete(id);
-      }
       for (const id of commentText.keys()) {
         if (!knownIds.has(id)) commentText.delete(id);
       }
@@ -238,7 +219,7 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
       const scrollTop = body.scrollTop;
 
       const focused = root.activeElement;
-      const typing = focused?.classList.contains('note')
+      const typing = focused?.classList.contains('quoted')
         ? {
             id: focused.closest('.case').dataset.id,
             start: focused.selectionStart,
@@ -246,22 +227,22 @@ export const createPanel = ({ onToggle, onComment, onCommentCommit, onFinish }) 
           }
         : null;
 
-      // Whatever else happened, a field being typed into stays open across the
-      // rebuild: rendered hidden, it could not take the focus back.
-      if (typing) openComments.add(typing.id);
+      // A pass state flipped from outside this tab would otherwise fold the very
+      // field being typed into, and a hidden field cannot take the focus back.
+      if (typing) foldOverrides.set(typing.id, false);
 
       body.replaceChildren();
       for (const group of groupByArea(state.cases)) {
         body.append(el('div', 'area', group.area));
         for (const item of group.cases) {
-          body.append(caseRow(item, onToggle, foldOverrides, openComments, commentText, editedIds, onComment, onCommentCommit));
+          body.append(caseRow(item, onToggle, foldOverrides, commentText, editedIds, onComment, onCommentCommit));
         }
       }
       if (state.discrepancies.length > 0) body.append(discrepancySection(state.discrepancies));
       body.scrollTop = scrollTop;
 
       if (typing) {
-        const restored = body.querySelector(`.case[data-id="${CSS.escape(typing.id)}"] .note`);
+        const restored = body.querySelector(`.case[data-id="${CSS.escape(typing.id)}"] .quoted`);
         if (restored) {
           restored.focus();
           restored.setSelectionRange(typing.start, typing.end);

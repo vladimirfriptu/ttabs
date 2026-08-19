@@ -105,39 +105,40 @@ export const PANEL_CSS = `
 
   .case.outdated .title { text-decoration: line-through; color: #999; }
 
-  .add-comment {
-    display: block;
-    margin: 5px 0 7px 26px;
-    padding: 3px 8px;
-    font: inherit;
-    color: #555;
-    background: #f4f4f4;
-    border: 1px solid #d8d8d8;
-    border-radius: 5px;
-    cursor: pointer;
-  }
-  .add-comment:hover { background: #ececec; }
-
-  .note {
+  /* The panel already indents secondary matter behind a left rule; the note
+     reuses that vocabulary in amber, so a human's words read apart from the
+     machine's. field-sizing grows it with what is typed — Chrome only, which
+     is the whole audience of an unpacked Chrome extension, so no input handler
+     measuring scrollHeight and no drag grip to ignore. */
+  .quoted {
     display: block;
     box-sizing: border-box;
     width: calc(100% - 26px);
     margin: 5px 0 7px 26px;
-    padding: 5px;
-    min-height: 50px;
+    padding: 1px 0 1px 9px;
     font: inherit;
-    color: inherit;
-    background: #fff;
-    border: 1px solid #d0d0d0;
-    border-radius: 4px;
-    resize: vertical;
+    color: #4a3a10;
+    background: none;
+    border: 0;
+    border-left: 2px solid #f0dfae;
+    resize: none;
+    outline: none;
+    overflow: hidden;
+    field-sizing: content;
+    min-height: 1.4em;
   }
+  .quoted:focus { border-left-color: #d99b00; background: #fffdf6; }
+  .quoted::placeholder { color: #b0a68a; }
 
+  /* What the folded case shows instead of the field: the fold hides what to do,
+     never what was found. */
   .comment-text {
     box-sizing: border-box;
     width: calc(100% - 26px);
     margin: 5px 0 7px 26px;
-    color: #444;
+    padding-left: 9px;
+    border-left: 2px solid #f0dfae;
+    color: #6a5a2a;
     white-space: pre-wrap;
   }
 
