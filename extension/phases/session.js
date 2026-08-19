@@ -20,13 +20,19 @@ export const startPhaseWatch = () => {
   let reading = false;
   let deadUntil = 0;
 
-  // Bumped every time the visible truth changes from a source other than the
-  // read/mutation currently in flight — a fresh render, a close, or the tab's
-  // key turning out to belong to a different task. A read or a mutation
-  // captures it before its await and compares after: a mismatch means someone
-  // else's answer already landed first, so this one is stale and must neither
-  // paint over it nor re-arm a timer that answer already re-armed.
+  // The identity of "which task this panel currently belongs to" — bumped
+  // only in close() and when the tab's key turns out to have changed, never on
+  // an ordinary render. A read or a mutation captures it before its await and
+  // compares after: a mismatch means the panel has since closed or moved to
+  // another task, so this reply is stale and must neither paint over it nor
+  // re-arm a timer that whoever superseded it already re-armed.
   let epoch = 0;
+
+  // How many mutations are currently awaiting the server. While it is
+  // non-zero, a routine poll's GET is not the authoritative answer for
+  // whatever the click is changing — the mutation's own reply is — so read()
+  // skips painting its snapshot but still keeps the timer running.
+  let mutating = 0;
 
   // The last "why nothing is showing" reason printed for this tab, or null when
   // there is nothing to explain. Printed once per reason, and again only once
@@ -152,12 +158,21 @@ export const startPhaseWatch = () => {
     }
 
     note(null);
+
+    // A mutation is in flight for this exact task: its own answer is the
+    // authoritative one for whatever it is changing, so this poll's snapshot
+    // sits out this round rather than racing it — the timer still ticks, and
+    // the next read (or the mutation's own render) catches up regardless.
+    if (mutating > 0) {
+      schedule(POLL_MS);
+      return;
+    }
+
     show(next);
     schedule(POLL_MS);
   };
 
   const show = (next) => {
-    epoch += 1;
     state = next;
     if (!panel) panel = createPanel({ onCheck, onReset });
     panel.render(state);
@@ -169,6 +184,7 @@ export const startPhaseWatch = () => {
     const at = epoch;
 
     let answer;
+    mutating += 1;
     try {
       answer = await mutate(phase, { task: key, action });
     } catch (e) {
@@ -182,6 +198,10 @@ export const startPhaseWatch = () => {
       panel?.render(state);
       panel?.showError(phase, `not saved: ${e.message}`);
       return;
+    } finally {
+      // Unblocks read()'s rendering whether the mutation succeeded or failed —
+      // a rejected write must not wedge every poll behind it forever.
+      mutating -= 1;
     }
 
     // Same guard on the success path — a read or another mutation that landed
@@ -202,12 +222,15 @@ export const startPhaseWatch = () => {
     const at = epoch;
 
     let answer;
+    mutating += 1;
     try {
       answer = await mutate(phase, { task: key, action: 'reset' });
     } catch (e) {
       if (epoch !== at) return;
       panel?.showError(phase, `not reset: ${e.message}`);
       return;
+    } finally {
+      mutating -= 1;
     }
 
     if (epoch !== at) return;
