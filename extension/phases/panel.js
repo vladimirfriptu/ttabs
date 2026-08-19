@@ -503,9 +503,17 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
       href = safeHref(link);
       paint();
 
-      // The chip this screen was reached through is gone from the journal, so
-      // nothing on the screen is about anything the server still offers.
-      if (mode === 'qa' && qaPhase(current.phases) !== qaAt) back();
+      // Two ways the screen stops being about anything: the chip it was reached
+      // through is gone from the journal, or the tab has moved to another task's
+      // group — which this panel survives (session.js re-keys it rather than
+      // closing it) and the checklist does not. Its cases are about to be
+      // replaced by another task's, and re-labelling a checklist mid-read would
+      // be a worse answer than putting the developer back in the list.
+      //
+      // Against viewTask, not the task the last render saw: the header's text is
+      // fixed when the view is built, so the view is the only thing whose idea of
+      // the task can go stale, and it is the thing being judged.
+      if (mode === 'qa' && (qaPhase(current.phases) !== qaAt || viewTask !== current.task)) back();
     },
 
     // Everything below belongs to the drilled-in screen, and every one of them
