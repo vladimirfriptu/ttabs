@@ -3,6 +3,7 @@
 
 import { closedCount, hasRecords, isSettable } from '../lib/phases.js';
 import { PANEL_CSS } from './styles.js';
+import { makeDraggable } from '../lib/draggable.js';
 
 const HOST_ID = 'task-tabs-phase-panel';
 
@@ -118,7 +119,12 @@ export const createPanel = ({ onCheck, onReset }) => {
     head.title = collapsed ? `${task.textContent} — ${count.textContent}` : '';
   };
 
+  const drag = makeDraggable(panel, head);
+
   head.addEventListener('click', () => {
+    // The header is the drag handle as well as the collapse control, and a drag
+    // ends in a click on it — without this, moving the panel would fold it too.
+    if (drag.moved()) return;
     collapsed = !collapsed;
     applyCollapsed();
   });

@@ -39,8 +39,16 @@ export const PANEL_CSS = `
     font: inherit;
     color: inherit;
     text-align: left;
-    cursor: pointer;
+    /* The header both collapses the panel and drags it; the grab cursor is the
+       only hint that the second is possible. */
+    cursor: grab;
+    /* Pointer events on a header that scrolls the page under a drag would fight
+       each other on a touchscreen or a trackpad. */
+    touch-action: none;
+    user-select: none;
   }
+
+  .panel.dragging .head { cursor: grabbing; }
 
   .task { font-weight: 600; }
   .count { color: #777; margin-left: auto; }
