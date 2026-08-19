@@ -12,6 +12,10 @@ import { readTaskKey } from '../lib/task-key.js';
 import { readTaskLink } from '../lib/task-link.js';
 import { createPanel } from './panel.js';
 import { applyAction, clearFrom } from '../lib/phases.js';
+import { QA_BASE, ACTIVE_POLL_MS, COMMENT_DEBOUNCE_MS, POLL_TOLERANCE_MS } from '../qa/config.js';
+import { readState as readQaState, setPassed, setComment, finish } from '../qa/bridge.js';
+import { normalizeState as normalizeQaState, applyPassed, matchesTask, finishWarning } from '../lib/qa-cases.js';
+import { createPendingSends } from '../lib/qa-pending.js';
 
 export const startPhaseWatch = () => {
   let timer = null;
@@ -46,6 +50,23 @@ export const startPhaseWatch = () => {
   // before its awaits and drops its answer if it has moved since.
   let mutated = 0;
 
+  // The drilled-in checklist. `qaOpen` is the phase the chip came from while the
+  // screen is up and '' when it is not, so it doubles as "is that screen open" —
+  // and every QA read is gated on it, because a closed screen must not leave a
+  // second poll of the QA server on every localhost tab. The QA widget already
+  // reads that server for its own panel; this is the same tab's second reader of
+  // it, so it borrows that widget's slower cadence rather than the journal's.
+  let qaOpen = '';
+  let qaState = null;
+  let qaTimer = null;
+  let qaReading = false;
+  let qaFinishing = false;
+  // When the last definitive answer arrived, and whether this outage has been
+  // explained yet — the same tolerance the QA widget applies, because the reason
+  // is the same: a restarting server must not wipe a note being typed.
+  let qaLastOk = 0;
+  let qaWarned = false;
+
   // The last "why nothing is showing" reason printed for this tab, or null when
   // there is nothing to explain. Printed once per reason, and again only once
   // the reason changes, so a tab that sits outside a task group forever does not
@@ -60,7 +81,43 @@ export const startPhaseWatch = () => {
     if (reason) console.debug(`[task-tabs] ${reason}`);
   };
 
+  // Separate from note(): the two screens go quiet for unrelated reasons, and a
+  // reason printed for one must not silence the other's.
+  let qaNotice = null;
+  const qaNote = (reason) => {
+    if (qaNotice === reason) return;
+    qaNotice = reason;
+    if (reason) console.debug(`[task-tabs] ${reason}`);
+  };
+
+  const stopQa = () => {
+    if (qaTimer === null) return;
+    clearTimeout(qaTimer);
+    qaTimer = null;
+  };
+
+  const scheduleQa = () => {
+    stopQa();
+    // A hidden tab keeps no timer here either; visibilitychange brings it back.
+    if (qaOpen === '' || document.hidden) return;
+    qaTimer = setTimeout(() => { qaPoll(); }, ACTIVE_POLL_MS);
+  };
+
+  // Everything the drilled-in screen holds, dropped. The panel is left alone:
+  // one caller has already taken the screen down (the back chevron, or the
+  // journal dropping the action), the other is about to.
+  const forgetQa = () => {
+    qaOpen = '';
+    qaState = null;
+    qaFinishing = false;
+    qaNotice = null;
+    qaWarned = false;
+    stopQa();
+    comments.clear();
+  };
+
   const close = () => {
+    forgetQa();
     epoch += 1;
     panel?.destroy();
     panel = null;
@@ -210,9 +267,161 @@ export const startPhaseWatch = () => {
     schedule(POLL_MS);
   };
 
+  // Which case a comment belongs to travels with it; the module deliberately does
+  // not catch, so the failure has to be absorbed here — an unhandled rejection in
+  // a timer reaches nobody.
+  const sendComment = (id, text) =>
+    setComment(id, text).catch((e) => panel?.showQaError(id, `not saved: ${e.message}`));
+
+  const comments = createPendingSends(sendComment, COMMENT_DEBOUNCE_MS);
+
+  const qaPoll = async () => {
+    if (qaOpen === '' || qaReading) return;
+    qaReading = true;
+
+    let raw;
+    try {
+      raw = await readQaState();
+    } catch (e) {
+      if (!qaWarned) {
+        qaWarned = true;
+        console.debug(`[task-tabs] cannot reach the QA server at ${QA_BASE} —`, e.message);
+      }
+      // A hiccup keeps the checklist on screen: the notes typed into it live in
+      // the view, and a restart that took them down would be worse than a
+      // screen that is a few seconds stale. Only a real absence empties it —
+      // and only a screen with a checklist on it has anything worth the wait,
+      // so one that never got one answers at once instead of sitting blank.
+      if (qaState === null || Date.now() - qaLastOk >= POLL_TOLERANCE_MS) {
+        qaState = null;
+        panel?.showQaEmpty();
+      }
+      scheduleQa();
+      return;
+    } finally {
+      qaReading = false;
+    }
+
+    // The screen closed while this read was on the wire, and whoever closed it
+    // has already dropped the timer.
+    if (qaOpen === '') return;
+
+    qaLastOk = Date.now();
+    qaWarned = false;
+    const next = normalizeQaState(raw);
+
+    // No session at all (a 404), and a session belonging to another task, are
+    // one screen: there is no checklist here, and the way on is to close the
+    // phase by hand. matchesTask is the QA widget's own rule, unchanged.
+    if (!next || !matchesTask(next, key)) {
+      qaNote(next ? `the running QA session is ${next.task}'s, not this tab's ${key} — no checklist to show` : null);
+      qaState = null;
+      panel?.showQaEmpty();
+      scheduleQa();
+      return;
+    }
+
+    qaNote(null);
+    qaState = next;
+    if (!qaFinishing) panel?.renderQa(qaState);
+    scheduleQa();
+  };
+
+  // The chip is clicked; the panel has already swapped its body and says which
+  // phase the journal put the action on.
+  const onChipQa = (phase) => {
+    qaOpen = phase;
+    qaLastOk = Date.now();
+    qaPoll();
+  };
+
+  const onQaBack = () => forgetQa();
+
+  const onQaToggle = async (id, passed) => {
+    // The checklist emptied under the click — a session that ended between the
+    // render and the pointer — and there is nothing left to flip.
+    if (!qaState) return;
+
+    const previous = qaState;
+    qaState = applyPassed(qaState, id, passed);
+    // The box is drawn, not native, so it only shows the flip once re-rendered.
+    panel?.renderQa(qaState);
+
+    try {
+      await setPassed(id, passed);
+    } catch (e) {
+      // Revert before re-rendering, or the finish warning would count a case the
+      // server never recorded as passed.
+      qaState = previous;
+      panel?.renderQa(qaState);
+      panel?.showQaError(id, `not saved: ${e.message}`);
+      return;
+    }
+
+    await qaPoll();
+  };
+
+  const onQaComment = (id, text) => comments.queue(id, text);
+
+  const onQaCommentCommit = (id, text) => {
+    comments.queue(id, text);
+    return comments.sendNow(id);
+  };
+
+  const onQaFinish = async () => {
+    if (qaFinishing) return;
+
+    const warning = finishWarning(qaState?.cases ?? []);
+    if (warning && !window.confirm(warning)) return;
+
+    qaFinishing = true;
+
+    try {
+      await comments.flush();
+      await finish('');
+    } catch (e) {
+      qaFinishing = false;
+      // The screen stays up: the CLI on the other end is still blocked, so
+      // pretending the session ended would hide that from the developer.
+      panel?.showQaFinishError(`could not finish: ${e.message}`);
+      return;
+    }
+
+    // Nothing here records the phase. The QA server does it itself on the way
+    // out (`--by qa-test-server`), and two writes to two servers behind one
+    // click is a half-done state nobody can reconcile — so this only goes back
+    // to the list and reads the journal, which is where the closed row appears.
+    forgetQa();
+    panel?.leaveQa();
+    poll();
+  };
+
+  // The one path on this screen that records the phase, and the reason it may:
+  // there is no session to finish, so finishing cannot be what closes it. It
+  // closes the phase the chip came from, which is the only one it knows.
+  const onQaCloseWithout = async () => {
+    const phase = qaOpen;
+    forgetQa();
+    panel?.leaveQa();
+    await onCheck(phase, 'done');
+  };
+
   const show = (next) => {
     state = next;
-    if (!panel) panel = createPanel({ onCheck, onChipQa });
+    if (!panel) {
+      panel = createPanel({
+        onCheck,
+        onChipQa,
+        qa: {
+          onBack: onQaBack,
+          onToggle: onQaToggle,
+          onComment: onQaComment,
+          onCommentCommit: onQaCommentCommit,
+          onFinish: onQaFinish,
+          onCloseWithout: onQaCloseWithout,
+        },
+      });
+    }
     panel.render(state, link);
   };
 
@@ -255,15 +464,15 @@ export const startPhaseWatch = () => {
     schedule(POLL_MS);
   };
 
-  // QA drill-in lands in the next task; until then the chip is inert rather
-  // than half-built.
-  const onChipQa = () => {};
-
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       stop();
+      stopQa();
       return;
     }
+
+    // The checklist has been as blind as the journal for as long as the tab was.
+    if (qaOpen !== '') qaPoll();
     // Coming back into view reads immediately — the tab has been blind for as
     // long as it was hidden — unless the server was found dead less than a
     // minute ago, in which case the backoff still owns the timer.

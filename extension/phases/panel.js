@@ -1,10 +1,11 @@
 // The panel's DOM, and nothing else — it renders what it is given and reports
 // clicks back. Deciding what to do with a click is session.js's business.
 
-import { closedCount, groupByStage, hasRecords } from '../lib/phases.js';
+import { closedCount, groupByStage, hasRecords, qaPhase } from '../lib/phases.js';
 import { safeHref } from '../lib/href.js';
 import { PANEL_CSS } from './styles.js';
 import { makeDraggable } from '../lib/draggable.js';
+import { createQaView } from './qa-view.js';
 
 const HOST_ID = 'task-tabs-phase-panel';
 
@@ -171,7 +172,7 @@ const hintText = (state, peek) => {
   return '';
 };
 
-export const createPanel = ({ onCheck, onChipQa }) => {
+export const createPanel = ({ onCheck, onChipQa, qa }) => {
   const host = el('div');
   host.id = HOST_ID;
   // Closed so a script elsewhere on the page cannot reach shadowRoot to forge
@@ -182,6 +183,19 @@ export const createPanel = ({ onCheck, onChipQa }) => {
   // re-renders every five seconds and must not undo a collapse the developer
   // just did to see the page underneath.
   let collapsed = false;
+
+  // Which screen the panel shows. The phase list is not torn down to show the
+  // checklist — it stays built and current behind it, so coming back is a change
+  // of visibility rather than a rebuild — but exactly one of the two is visible.
+  let mode = 'phases';
+  const qaHost = el('div', 'qa');
+  qaHost.hidden = true;
+  let view = null;
+  // The phase the chip drilled in from, and the name the view's header was built
+  // with. A journal that stops carrying the qa action takes the screen down with
+  // it, and one that moves the action elsewhere rebuilds the view.
+  let qaAt = '';
+  let viewPhase = '';
 
   const style = el('style', null, PANEL_CSS);
   const panel = el('div', 'panel');
@@ -238,12 +252,80 @@ export const createPanel = ({ onCheck, onChipQa }) => {
   const hint = el('div', 'hint');
 
   const applyCollapsed = () => {
-    body.hidden = collapsed;
-    foot.hidden = collapsed || noticeText === '';
-    panel.classList.toggle('collapsed', collapsed);
+    const drilled = mode === 'qa';
+    // The checklist brings its own header, scroller and foot: the phase screen's
+    // three go away whole rather than being reused for another anatomy. Collapse
+    // goes with them — there is nothing to collapse a screen you left to.
+    head.hidden = drilled;
+    body.hidden = drilled || collapsed;
+    foot.hidden = drilled || collapsed || noticeText === '';
+    panel.classList.toggle('collapsed', !drilled && collapsed);
     fold.setAttribute('aria-label', collapsed ? 'expand' : 'collapse');
     chevron.textContent = collapsed ? '🧭' : '–';
     fold.title = collapsed ? `${taskText.textContent} — ${count.textContent}` : '';
+  };
+
+  const applyMode = () => {
+    qaHost.hidden = mode !== 'qa';
+    // A case's steps do not read at 360, which is the reason the design widens
+    // the panel for this screen and only this one.
+    panel.classList.toggle('wide', mode === 'qa');
+    applyCollapsed();
+  };
+
+  const exitQa = () => {
+    mode = 'phases';
+    applyMode();
+  };
+
+  // The two ways the screen closes itself. session.js is told, because it is
+  // what stops reading the QA server — a closed view must not leave a poll
+  // behind on every localhost tab.
+  const back = () => {
+    exitQa();
+    qa.onBack();
+  };
+
+  const enterQa = () => {
+    if (!current) return;
+    // Asked of the journal, not of the row that was clicked: which phase the
+    // checklist belongs to is the server's to say, and this widget's never to
+    // know by name.
+    const phase = qaPhase(current.phases);
+    if (!phase) return;
+    qaAt = phase;
+
+    // Kept between drill-ins, so the drag handle in its header is registered
+    // once — a view rebuilt on every entry would register another every time.
+    // Only a journal that has since renamed the phase forces a rebuild, since
+    // the name is drawn into the header and the button.
+    if (view && viewPhase !== phase) {
+      view.destroy();
+      view = null;
+    }
+
+    if (!view) {
+      viewPhase = phase;
+      view = createQaView({
+        phase,
+        task: current.task,
+        onBack: back,
+        onToggle: qa.onToggle,
+        onComment: qa.onComment,
+        onCommentCommit: qa.onCommentCommit,
+        onFinish: qa.onFinish,
+        onCloseWithout: qa.onCloseWithout,
+      });
+      view.mount(qaHost);
+      // The phase header is hidden on this screen, so the panel would stop being
+      // draggable without this. The class is the one the stylesheet in this
+      // widget already names.
+      makeDraggable(panel, qaHost.querySelector('.qa-head'));
+    }
+
+    mode = 'qa';
+    applyMode();
+    onChipQa(phase);
   };
 
   const drag = makeDraggable(panel, head);
@@ -308,7 +390,7 @@ export const createPanel = ({ onCheck, onChipQa }) => {
         // over a nameless group would be a heading for nothing.
         if (group.stage) body.append(stageCaption(group));
         for (const entry of group.phases) {
-          body.append(phaseRow(entry, index, onCheck, onChipQa));
+          body.append(phaseRow(entry, index, onCheck, enterQa));
           index += 1;
         }
       }
@@ -395,7 +477,7 @@ export const createPanel = ({ onCheck, onChipQa }) => {
 
   fold.append(count, chevron);
   head.append(taskText, taskLink, round, fold);
-  panel.append(head, body, foot);
+  panel.append(head, body, foot, qaHost);
   root.append(style, panel);
   document.documentElement.append(host);
 
@@ -407,6 +489,35 @@ export const createPanel = ({ onCheck, onChipQa }) => {
       // resolve against the page under test.
       href = safeHref(link);
       paint();
+
+      // The chip this screen was reached through is gone from the journal, so
+      // nothing on the screen is about anything the server still offers.
+      if (mode === 'qa' && qaPhase(current.phases) !== qaAt) back();
+    },
+
+    // Everything below belongs to the drilled-in screen, and every one of them
+    // checks the mode: a QA reply that was already on the wire when the
+    // developer stepped back must not paint over the phase list.
+    renderQa(qaState) {
+      if (mode === 'qa') view?.render(qaState);
+    },
+
+    showQaEmpty() {
+      if (mode === 'qa') view?.showEmpty();
+    },
+
+    showQaError(id, message) {
+      if (mode === 'qa') view?.showError(id, message);
+    },
+
+    showQaFinishError(message) {
+      if (mode === 'qa') view?.showFinishError(message);
+    },
+
+    // The way out that session.js takes itself, having just done the writing
+    // that ends the screen — it needs no telling that the screen is closing.
+    leaveQa() {
+      if (mode === 'qa') exitQa();
     },
 
     // Attached to the row that failed, and wiped by the next render — the poll
