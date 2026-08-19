@@ -86,19 +86,15 @@ keyboard reaches the same write: Tab to a box, then Space or Enter.
 The phases are grouped into stages, in the order the server sends them. Each
 stage gets a caption with its name, a rule across the panel and its own
 `closed/total` tally; a phase whose stage the server leaves blank sits under no
-caption at all. The header counts the whole journal the same way, beside the task
-key — which is a link into the tracker once a Jira site is configured
-(`task-tab site <url>`) and plain text until then. A `round N` badge appears
-there once a task has been through the pipeline more than once; round one shows
-nothing. Under the list one line says where the journal stands: `next: crit`,
-or `no records yet`, or `all closed`.
+caption at all. The header counts the whole journal the same way, beside the task key — which is
+a link into the tracker once a Jira site is configured (`task-tab site <url>`)
+and plain text until then. A `round N` badge appears there once a task has been
+through the pipeline more than once; round one shows nothing. Under the list one
+line says where the journal stands: `next: crit`, or `no records yet`, or
+`all closed`.
 
-Clicking a checkbox that is already ticked clears that phase **and every phase
-after it**. There is no confirmation dialog: hovering the row — or reaching its
-box with Tab — dims every row the click would reach and spells the extent out on
-that line under the list, as `clears 3 phases, from dev`. That preview is the
-whole warning, and it is worth reading, because nothing here walks a cascade
-back: phases are recorded one checkbox at a time.
+Clicking a checkbox that is already ticked clears that one phase, and nothing
+else — a mis-tick costs exactly the tick it took to make.
 
 `open` is the one state a human can only leave, never author: closing it is an
 ordinary click on its box, but nothing in the panel puts a phase into it.

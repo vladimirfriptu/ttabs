@@ -7,7 +7,7 @@ import {
   closedCount,
   hasRecords,
   groupByStage,
-  clearFrom,
+  clearOne,
   qaPhase,
 } from '../extension/lib/phases.js';
 
@@ -142,17 +142,19 @@ test('groupByStage does not merge a stage that appears twice apart', () => {
   assert.deepStrictEqual(groups.map((g) => g.stage), ['one', 'two', 'one']);
 });
 
-test('clearFrom clears the phase and everything after it', () => {
+test('clearOne unrecords one phase and leaves the rest alone', () => {
   const state = normalizeState(payload());
-  const next = clearFrom(state, 'dev');
-  assert.deepStrictEqual(next.phases.map((p) => p.state), ['done', '', '', '', '']);
-  assert.strictEqual(next.phases[3].detail, '');
-  assert.strictEqual(state.phases[3].detail, 'reason=stale');
+  const next = clearOne(state, 'dev');
+  assert.deepStrictEqual(next.phases.map((p) => p.state), ['done', '', '', 'open', '']);
+  assert.strictEqual(next.phases[2].detail, '');
+  assert.strictEqual(state.phases[2].detail, 'reason=docs-only');
+  assert.strictEqual(next.phases[3].detail, 'reason=stale');
 });
 
-test('clearFrom leaves a state it does not recognise alone', () => {
+test('clearOne leaves a phase it does not know alone', () => {
   const state = normalizeState(payload());
-  assert.deepStrictEqual(clearFrom(state, 'nope').phases.map((p) => p.state), state.phases.map((p) => p.state));
+  const next = clearOne(state, 'nope');
+  assert.deepStrictEqual(next.phases.map((p) => p.state), state.phases.map((p) => p.state));
 });
 
 test('qaPhase names the phase that drills in, and nothing when none does', () => {

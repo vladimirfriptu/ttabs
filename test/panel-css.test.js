@@ -40,7 +40,6 @@ const PHASE_CLASSES = [
   'done',
   'skip',
   'open',
-  'fading',
   'gutter',
   'box',
   'mark',

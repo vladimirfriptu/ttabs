@@ -230,32 +230,13 @@ export const PANEL_CSS = `
     outline-offset: 2px;
   }
 
-  /* The extent of the cascade the next click would run, shown on the rows it
-     would reach. Set after the state rules, which it deliberately overrides at
-     equal specificity. */
-  .phase.fading .name { color: #b9b9b9; text-decoration: none; }
-  .phase.fading .box { background: #fff; border-color: #d0d0d0; }
-  .phase.fading .rail { background: #ededed; }
-  /* Hidden by visibility rather than display: the panel is anchored to the
-     bottom of the window, so a peek that removed a detail line would slide the
-     whole list under the pointer and hand the hover to another row.
-     .error is in the list on purpose — a dimmed row is announcing it is about
-     to be cleared, and a failed click's message on it is already history. */
-  .phase.fading .mark,
-  .phase.fading .badge,
-  .phase.fading .detail,
-  .phase.fading .meta,
-  .phase.fading .error { visibility: hidden; }
-
   .detail { color: #7a5c00; font-size: 12px; white-space: pre-wrap; }
   .meta { color: #888; font-size: 12px; }
   .error { color: #b00020; font-size: 12px; }
 
-  /* One line under the list, carrying whichever of "what is next" and "what the
-     click would clear" applies — and holding a line's worth of height even when
-     it carries neither, because the panel grows upwards from the bottom of the
-     window and a line that appeared with the peek would move the list under the
-     pointer. */
+  /* One line under the list, holding a line's worth of height even when it says
+     nothing: the panel grows upwards from the bottom of the window, so a line that
+     came and went would move the list under the pointer. */
   .hint {
     padding: 5px 12px 8px;
     min-height: 1.4em;

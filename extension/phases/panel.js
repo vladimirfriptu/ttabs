@@ -71,12 +71,9 @@ const chipFor = (entry, onChipQa) => {
   return null;
 };
 
-const phaseRow = (entry, index, onCheck, onChipQa) => {
+const phaseRow = (entry, onCheck, onChipQa) => {
   const wrapper = el('div', `phase ${CLASS_FOR_STATE[entry.state]}`);
   wrapper.dataset.phase = entry.phase;
-  // The hover handler is delegated to the body, which outlives any one row — so
-  // the row has to say where it sits in the list rather than close over it.
-  wrapper.dataset.index = String(index);
 
   const gutter = el('span', 'gutter');
   const box = el('span', 'box');
@@ -84,11 +81,9 @@ const phaseRow = (entry, index, onCheck, onChipQa) => {
   box.setAttribute('role', 'checkbox');
   box.setAttribute('aria-checked', entry.state === 'done' ? 'true' : entry.state === 'open' ? 'mixed' : 'false');
   // A span says nothing to the tab order on its own, and this is the only thing
-  // in the list that writes — the reset button that used to be focusable is gone.
+  // in the list that writes.
   box.tabIndex = 0;
-  box.title = recorded
-    ? 'click: clear this phase and every one after it'
-    : 'click: done · alt-click: skip';
+  box.title = recorded ? 'click: clear this phase' : 'click: done · alt-click: skip';
 
   // A tick would read as "ran, nothing outstanding", which is the opposite of
   // what `open` records; the dash is what the state actually means.
@@ -99,7 +94,7 @@ const phaseRow = (entry, index, onCheck, onChipQa) => {
   // than off a change event, which carries none. `open` is settable like the
   // rest — a human may close it by hand, only never author it.
   const toggle = (event) => {
-    if (recorded) onCheck(entry.phase, 'reset');
+    if (recorded) onCheck(entry.phase, 'clear');
     else onCheck(entry.phase, event.altKey ? 'skip' : 'done');
   };
 
@@ -157,13 +152,9 @@ const stageCaption = (group) => {
   return caption;
 };
 
-// The one line under the list, and the peek owns it while there is one: how far
-// the click reaches is the thing worth reading at that moment.
-const hintText = (state, peek) => {
-  if (peek >= 0) {
-    const count = state.phases.length - peek;
-    return `clears ${count} ${count === 1 ? 'phase' : 'phases'}, from ${state.phases[peek].phase}`;
-  }
+// The one line under the list: where the journal stands, in the fewest words the
+// state allows.
+const hintText = (state) => {
   if (!hasRecords(state.phases)) return 'no records yet';
   if (state.next) return `next: ${state.next}`;
   // Only the count the header already shows, read the other way round — no
@@ -228,28 +219,15 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
   foot.hidden = true;
   let noticeText = '';
 
-  // What the panel was last told, kept because the panel repaints on its own
-  // when the pointer or the focus moves — the preview is nobody else's business.
+  // What the panel was last told.
   let current = null;
   let href = '';
 
-  // The row the preview is drawn from, and the two things that can point at one:
-  // the pointer hovering a row, and the keyboard focusing a box. The pointer
-  // wins while it is over a row — it is the more recent intent — and letting go
-  // of it falls back to wherever the focus still is, rather than to nothing.
-  let peek = -1;
-  let hoverAt = -1;
-  let focusAt = -1;
-
   // The payload the body currently shows, as JSON. Two consecutive polls almost
   // always carry the same one, and rebuilding the rows throws away whatever had
-  // the keyboard focus. The preview is not in it: dimming is presentation, and a
-  // hover that rebuilt the list would pull the box out from under the click that
-  // is on its way.
+  // the keyboard focus.
   let rendered = null;
 
-  // The line under the list, kept across rebuilds because the preview rewrites
-  // its text without touching anything else.
   const hint = el('div', 'hint');
 
   // Declared before the two apply* functions below use it: a change of mode
@@ -382,12 +360,11 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
       const scrollTop = body.scrollTop;
       // A keyboard write rebuilds the list on the spot — session.js renders the
       // tick optimistically — so without this, ticking a phase would cost a whole
-      // Tab traversal to reach the next one. Only a payload change gets here; a
-      // preview never rebuilds and so never needs saving from.
+      // Tab traversal to reach the next one.
       //
       // The kind of control is remembered along with the row: restoring a row's
       // box to someone who was on its chip would put a write under the next Space
-      // they press, and that write clears the phase and every one after it.
+      // they press.
       const focused = root.activeElement;
       let focusedKind = '';
       if (focused?.classList.contains('box')) focusedKind = '.box';
@@ -397,15 +374,11 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
 
       body.replaceChildren();
 
-      let index = 0;
       for (const group of groupByStage(current.phases)) {
         // A stage the server left empty gets no caption — a rule and a tally
         // over a nameless group would be a heading for nothing.
         if (group.stage) body.append(stageCaption(group));
-        for (const entry of group.phases) {
-          body.append(phaseRow(entry, index, onCheck, enterQa));
-          index += 1;
-        }
+        for (const entry of group.phases) body.append(phaseRow(entry, onCheck, enterQa));
       }
 
       // Always appended, empty text included: the panel is anchored to the
@@ -413,11 +386,10 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
       // whole panel up and down under the pointer.
       body.append(hint);
       body.scrollTop = scrollTop;
-      // The restored control's own focusin recomputes the preview against the list
-      // just drawn, so nothing here has to say what it should be. A row that has
-      // since lost its chip restores nothing, which is the honest answer.
+      // A row that has since lost its chip restores nothing, which is the honest
+      // answer.
       if (focusedPhase) body.querySelector(`.phase[data-phase="${CSS.escape(focusedPhase)}"] ${focusedKind}`)?.focus();
-      applyPeek();
+      hint.textContent = hintText(current);
     } else {
       // The rebuild is what normally clears a row's error; without one, the
       // same wiping has to happen by hand or a failed click's message would
@@ -427,66 +399,6 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
 
     applyCollapsed();
   };
-
-  // Which row a node belongs to, but only when clearing it is a thing that could
-  // happen: an unrecorded row has nothing to clear and previews nothing.
-  const recordedIndexOf = (node) => {
-    const row = node?.closest?.('.phase');
-    if (!row) return -1;
-    const index = Number(row.dataset.index);
-    const entry = current?.phases[index];
-    return entry && entry.state !== '' ? index : -1;
-  };
-
-  // The preview is drawn onto the rows that are already there, never by building
-  // new ones: the box a click is landing on has to survive until the click.
-  //
-  // The index is re-checked against the state in hand rather than trusted — the
-  // pointer can still be over a row a poll has since cleared or dropped, and an
-  // index past the end would take hintText down with it.
-  const applyPeek = () => {
-    if (!current) return;
-
-    const peeked = peek >= 0 ? current.phases[peek] : undefined;
-    const at = peeked && peeked.state !== '' ? peek : -1;
-
-    const rows = body.querySelectorAll('.phase');
-    rows.forEach((row, index) => row.classList.toggle('fading', at >= 0 && index >= at));
-    hint.textContent = hintText(current, at);
-  };
-
-  const repeek = () => {
-    const next = hoverAt >= 0 ? hoverAt : focusAt;
-    if (next === peek) return;
-    peek = next;
-    applyPeek();
-  };
-
-  // Delegated to the body rather than bound per row: a repaint replaces every
-  // row, and a listener on the node the pointer is over would go with it.
-  body.addEventListener('mouseover', (event) => {
-    hoverAt = recordedIndexOf(event.target);
-    repeek();
-  });
-
-  body.addEventListener('mouseleave', () => {
-    hoverAt = -1;
-    repeek();
-  });
-
-  // The keyboard reaches the same write the pointer does, so it gets the same
-  // warning — the preview is what this widget has instead of a confirmation.
-  body.addEventListener('focusin', (event) => {
-    // Only a box previews. A chip in a recorded row is a link out, and dimming
-    // half the list because the tab order passed through it would be a lie.
-    focusAt = event.target.classList?.contains('box') ? recordedIndexOf(event.target) : -1;
-    repeek();
-  });
-
-  body.addEventListener('focusout', () => {
-    focusAt = -1;
-    repeek();
-  });
 
   fold.append(count, chevron);
   head.append(taskText, taskLink, round, fold);

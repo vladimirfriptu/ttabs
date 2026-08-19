@@ -6,11 +6,11 @@
 // and a state this version has never heard of degrades to "not yet" instead of
 // rendering as a fourth unstyled thing.
 //
-// No fold lives here, and none ever will — the reset cascade, the stale-checks
-// downgrade and duplicate suppression all belong to the server. `clearFrom` and
-// `applyAction` are optimistic guesses at what the server is about to do, drawn
-// locally so a click repaints at once; the server's own answer always replaces
-// the guess wholesale, never merges with it.
+// No fold lives here, and none ever will — the stale-checks downgrade and
+// duplicate suppression belong to the server. `clearOne` and `applyAction` are
+// optimistic guesses at what the server is about to do, drawn locally so a click
+// repaints at once; the server's own answer always replaces the guess wholesale,
+// never merges with it.
 
 import { safeHref } from './href.js';
 
@@ -91,18 +91,13 @@ export const groupByStage = (phases) => {
   return groups;
 };
 
-// What `reset` is about to do, drawn locally so the row responds to the click at
-// once. The cascade itself belongs to the server — this is the same kind of guess
-// as applyAction, and the answer that comes back replaces it wholesale.
-export const clearFrom = (state, phase) => {
-  const at = state.phases.findIndex((p) => p.phase === phase);
-  if (at < 0) return state;
-
-  return {
-    ...state,
-    phases: state.phases.map((p, i) => (i >= at ? { ...p, state: '', detail: '' } : p)),
-  };
-};
+// What `clear` is about to do, drawn locally so the row answers the click at once.
+// One phase, nothing after it — the cascade `reset` performs is not something this
+// widget asks for any more.
+export const clearOne = (state, phase) => ({
+  ...state,
+  phases: state.phases.map((p) => (p.phase === phase ? { ...p, state: '', detail: '' } : p)),
+});
 
 // Which phase opens the checklist. The widget never learns its name from anywhere
 // else — that is the whole point of the server saying so.

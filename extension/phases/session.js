@@ -11,7 +11,7 @@ import { readState, mutate, HttpStatusError } from './bridge.js';
 import { readTaskKey } from '../lib/task-key.js';
 import { readTaskLink } from '../lib/task-link.js';
 import { createPanel } from './panel.js';
-import { applyAction, clearFrom } from '../lib/phases.js';
+import { applyAction, clearOne } from '../lib/phases.js';
 import { QA_BASE, ACTIVE_POLL_MS, COMMENT_DEBOUNCE_MS, POLL_TOLERANCE_MS } from '../qa/config.js';
 import { readState as readQaState, setPassed, setComment, finish } from '../qa/bridge.js';
 import { normalizeState as normalizeQaState, applyPassed, matchesTask, finishWarning } from '../lib/qa-cases.js';
@@ -427,7 +427,7 @@ export const startPhaseWatch = () => {
 
   const onCheck = async (phase, action) => {
     const previous = state;
-    const optimistic = action === 'reset' ? clearFrom(state, phase) : applyAction(state, phase, action);
+    const optimistic = action === 'clear' ? clearOne(state, phase) : applyAction(state, phase, action);
     show(optimistic);
     const at = epoch;
 
@@ -457,7 +457,8 @@ export const startPhaseWatch = () => {
     if (epoch !== at) return;
 
     // The server's answer replaces the optimistic guess wholesale — it is the
-    // journal after the fold, which may differ from the single field we flipped.
+    // journal after the server's own rules ran, which may differ from the single
+    // field we flipped.
     // Counting it is what makes a GET older than this answer drop its snapshot.
     mutated += 1;
     show(answer);
