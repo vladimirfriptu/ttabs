@@ -237,9 +237,9 @@ the CLI, which delegates to the fold module. The widget never implements the
 cascade itself.
 
 **Reset-on-untick, and what it must send.** The widget unticks a checkbox by
-sending `reset`, showing the consequence on hover rather than in a dialog. That is
-accepted: nothing is destroyed, because the journal is append-only and `history`
-keeps every round, so an accidental untick is recovered by re-ticking.
+sending `reset`, showing the consequence on hover rather than in a dialog — see
+"Reset is on the checkbox" under the widget contract for the settled design and
+for the recovery cost it carries.
 
 One requirement follows from it. `history` feeds `/daily`, where a deliberate
 "back to development" and a mis-click must not read the same. So an
@@ -313,13 +313,27 @@ yet, with one-click closure and Alt+click for skip. That is a widget-side
 choice — this spec fixes only the wire actions (`done`, `skip`, `reset`) and
 that the widget must not fabricate transitions the server doesn't accept.
 
-**Reset is not on the checkbox.** A row's primary control toggles between "not
-yet" and `done`. `reset` is a separate action per phase (a menu item, a
-long-press, whatever the widget agent lands on) and **requires a confirmation
-step**, because the server will cascade to every later phase. The confirmation
-must state that fact — "resetting `dev` will also reopen checks, code-review,
-crit, qa-cases, qa-manual, comments, tests-review, mr, mr-review, cleanup"
-— the widget derives that list from the canonical phase order in the response.
+**Reset is on the checkbox** — settled 2026-08-19, superseding this spec's
+original "reset is not on the checkbox … requires a confirmation step". A row's
+control has two directions: an unrecorded phase becomes `done` (alt-click:
+`skip`), and a recorded one is unticked, which sends `reset` and cascades. No
+separate affordance, no modal; hovering a recorded phase dims every row the
+cascade will reach and the panel's foot names the count.
+
+The widget agent's reasoning stands: a checkbox that cannot be unticked is not a
+checkbox, and a modal on every correction of a mis-click costs more than showing
+the consequence beforehand.
+
+**One claim in that reasoning is overstated, and the correction matters.**
+"The journal is append-only, so nothing here is unrecoverable" is true of the
+*history* and false of the *state*. Measured on a task at 13/14: unticking `start`
+drops it to 0/14, and re-ticking `start` restores 1/14, not 13. Recovery costs one
+click per cleared phase. The hover preview is therefore the only guard, and it
+guards a deliberate click — by definition it does not guard the mis-click it was
+introduced for.
+
+That asymmetry is accepted for v1 rather than solved, and the way to close it is
+recorded in "Open questions" below as a possible `POST /api/phase/undo`.
 
 **Round marker.** When `round > 1`, show it visibly; the fact that this task
 went through the pipeline multiple times is important context. History of
@@ -400,6 +414,22 @@ agent will not read that file:
    internal architecture.
 3. **Wire-up.** The widget agent's PR references this server; the QA widget's
    scoping and detection code is the closest existing example in ttabs.
+
+## Possible follow-up — `POST /api/phase/undo`
+
+Not in v1, and not blocking. It exists here because reset-on-untick makes one
+click cost N clicks to reverse (measured above), and the hover preview does not
+guard the mis-click case it was introduced for.
+
+Shape, if it is ever wanted: a server endpoint (**not** a fourth action — the wire
+actions stay `done` | `skip` | `reset`) that folds the journal as of before the
+last mutation and appends compensating records with `by=undo` to restore it. The
+fold module is untouched, no new state joins the model, and history stays honest
+about the undo having happened rather than hiding it. Cost on the widget side is
+one affordance — a toast with an undo button after a cascade would be enough.
+
+Decide it after the widget has been used for real: if hover-preview turns out to
+prevent mis-clicks in practice, this is waste.
 
 ## Open questions the widget agent must answer
 
