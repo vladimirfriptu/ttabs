@@ -28,9 +28,14 @@ export const call = async ({ method = 'GET', path, body }) => {
     init.body = JSON.stringify(body);
   }
 
-  let response;
+  let result;
   try {
-    response = await fetch(`${QA_BASE}${path}`, init);
+    const response = await fetch(`${QA_BASE}${path}`, init);
+    result = { ok: response.ok, status: response.status, data: null };
+    // Read inside the guard, not after it: an aborted or truncated body throws
+    // here, and `data: null` on an otherwise clean 200 is what readState hands
+    // the panel as a definitive "no session running".
+    if (response.ok && response.status !== 204) result.data = await response.json();
   } catch (e) {
     // A timed-out request is a server that is not answering, which is the one
     // failure every caller already knows how to absorb — so it rejects like any
@@ -40,12 +45,6 @@ export const call = async ({ method = 'GET', path, body }) => {
       throw new Error(`no answer within ${REQUEST_TIMEOUT_MS}ms`);
     }
     throw e;
-  }
-
-  const result = { ok: response.ok, status: response.status, data: null };
-
-  if (response.ok && response.status !== 204) {
-    result.data = await response.json().catch(() => null);
   }
 
   return result;
