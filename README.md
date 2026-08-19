@@ -1,5 +1,7 @@
 # ttabs
 
+English · [Українська](./README.uk.md)
+
 Groups Chrome tabs by Jira task, from the command line, and keeps each group's
 title in step with the task's status:
 
@@ -155,6 +157,21 @@ When the panel is missing and a phase server is in fact running:
    like another widget entirely: the checklist brings its own header, so the task
    key is still there, but the phase rows, the `closed/total` counter and the
    collapse chevron are not. The arrow in its top-left corner goes back.
+
+## The servers behind the two panels
+
+Both panels are clients. The extension ships neither server: the checklist comes
+from something listening on `47823`, the phase journal from something listening
+on `47824`, and both live on the developer's own machine. With nothing there, the
+panels stay away and the rest of the extension carries on as if they did not
+exist — no error, no placeholder, nothing in the console at the default level.
+
+That also means nobody has to use the servers behind them today. Anyone can write
+their own — in any language, over an afternoon — and the two panels will pick it
+up. What they require of it is written down in
+[docs/phase-server-contract.md](./docs/phase-server-contract.md): the routes, the
+fields, which of them are optional, what a widget does with an answer it does not
+recognise, and the handful of promises a server has to keep.
 
 ## Install
 
