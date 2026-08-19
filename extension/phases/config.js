@@ -19,10 +19,10 @@ export const PHASE_MESSAGE = 'phase-request';
 // after coming back into view.
 export const POLL_MS = 5000;
 
-// How long the widget leaves the server alone after failing to reach it. Most
-// sessions never start the phase server, so this is the steady state for the
-// majority of localhost tabs: one refused connection a minute, no console
-// output, no panel.
+// How long the widget leaves the server alone after failing to reach it. The
+// server does not survive a reboot and nothing re-launches it, and a plain
+// localhost tab may have no task group behind it at all — so this has to be a
+// cheap, indefinite absence-tolerance, not a short retry.
 export const DEAD_RETRY_MS = 60000;
 
 // A tab-group title carries a tracker key, not necessarily one this server
