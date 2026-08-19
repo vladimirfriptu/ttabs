@@ -82,7 +82,8 @@ Each phase is in one of four states: recorded (`done`), skipped, `open` — the
 phase ran and left something outstanding, and the panel shows why — or not yet
 reached. Clicking a phase's checkbox closes it; alt-click skips it instead. The
 keyboard reaches both: Tab to a box, then Space or Enter records it, and holding
-Alt with either one skips it.
+Alt with either one skips it — on a phase that has no record yet, since on a
+recorded one both chords clear it instead.
 
 The phases are grouped into stages, in the order the server sends them. Each
 stage gets a caption with its name, its own `closed/total` tally, and a hairline
@@ -95,8 +96,12 @@ The header counts the whole journal the same way, beside the task key — which 
 a link into the tracker once a Jira site is configured (`task-tab site <url>`)
 and plain text until then. A `round N` badge appears there once a task has been
 through the pipeline more than once; round one shows nothing. Under the list one
-line says where the journal stands: `next: crit`, or `no records yet`, or
-`all closed`.
+line says where the journal stands, in one of four ways: `no records yet` until
+something is recorded, then `next: crit` whenever the server names a next phase,
+`all closed` once every phase is done or skipped, and nothing at all in the case
+none of those covers — a journal with records, no next phase named, and a phase
+still not closed. Which phase would come next is the server's to say, so the
+widget says nothing rather than guessing.
 
 Clicking a checkbox that is already ticked clears that one phase, and nothing
 else — a mis-tick costs exactly the tick it took to make.

@@ -9,6 +9,7 @@ import {
   groupByStage,
   clearOne,
   qaPhase,
+  hintText,
 } from '../extension/lib/phases.js';
 
 const payload = () => ({
@@ -177,4 +178,55 @@ test('hasRecords tells a fresh journal from a started one', () => {
   assert.strictEqual(hasRecords(phases), true);
   const fresh = normalizeState({ task: 'ACME-1', phases: [{ phase: 'dev' }, { phase: 'crit' }] });
   assert.strictEqual(hasRecords(fresh.phases), false);
+});
+
+// Four outcomes, and the fourth is the one a reader is likeliest to forget: the
+// empty string. Pinned here because it is a deliberate silence, not a fallthrough
+// nobody thought about — a journal can perfectly well have records, no next phase
+// named, and something still not closed, and the widget has no opinion to offer
+// there.
+test('hintText says nothing has happened yet before anything has', () => {
+  const state = normalizeState({ task: 'ACME-1', phases: [{ phase: 'dev' }, { phase: 'crit' }] });
+  assert.strictEqual(hintText(state), 'no records yet');
+});
+
+test('hintText names the next phase whenever the server names one', () => {
+  assert.strictEqual(hintText(normalizeState(payload())), 'next: crit');
+});
+
+// Ahead of the tally, deliberately: a server that names a next phase is answered
+// with that name even if every phase it sent is already closed.
+test('hintText prefers the server\'s next phase over its own tally', () => {
+  const state = normalizeState({
+    task: 'ACME-1',
+    next: 'release',
+    phases: [{ phase: 'dev', state: 'done' }, { phase: 'crit', state: 'skip' }],
+  });
+  assert.strictEqual(hintText(state), 'next: release');
+});
+
+test('hintText reads the tally back as all closed once nothing is left', () => {
+  const state = normalizeState({
+    task: 'ACME-1',
+    phases: [{ phase: 'dev', state: 'done' }, { phase: 'crit', state: 'skip' }],
+  });
+  assert.strictEqual(hintText(state), 'all closed');
+});
+
+test('hintText stays silent with records, no next phase, and a phase still open', () => {
+  const state = normalizeState({
+    task: 'ACME-1',
+    phases: [{ phase: 'dev', state: 'done' }, { phase: 'crit', state: 'open' }],
+  });
+  assert.strictEqual(hintText(state), '');
+});
+
+// The same silence for a phase nothing has recorded yet — `open` is not what
+// makes the outcome reachable, an unclosed phase of any kind is.
+test('hintText stays silent with records and a phase not yet reached', () => {
+  const state = normalizeState({
+    task: 'ACME-1',
+    phases: [{ phase: 'dev', state: 'done' }, { phase: 'crit' }],
+  });
+  assert.strictEqual(hintText(state), '');
 });

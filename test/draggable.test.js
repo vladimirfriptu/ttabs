@@ -200,3 +200,42 @@ test('a pointercancel is enough to end a drag that was never captured', () => {
     assert.strictEqual(panel.style.left, undefined);
   });
 });
+
+// applyMode() calls settle() every time the panel changes screen, and the phase
+// panel grows from 360 to 420 on the way into its checklist. withWindow's
+// addEventListener is a noop, so the resize path never reaches this code from a
+// test — and the mode change is the other caller, exercised here.
+test('settle re-clamps a panel that grew wider than the room to its right', () => {
+  withWindow(() => {
+    const handle = fakeHandle();
+    const panel = fakePanel();
+    const drag = makeDraggable(panel, handle);
+
+    press(handle, { x: 50, y: 50 });
+    move(handle, { x: 830, y: 50 });
+    assert.strictEqual(panel.style.left, '880px', 'dragged flush to the right edge');
+
+    panel.offsetWidth = 420;
+    drag.settle();
+
+    assert.strictEqual(panel.style.left, '780px', '60px of the widened panel would hang off the edge');
+    assert.strictEqual(panel.style.top, '200px', 'the vertical position is not disturbed');
+  });
+});
+
+// A panel nobody has dragged is still positioned by the stylesheet's own corner
+// anchoring; writing left/top here would silently take that over — and every mode
+// change calls settle().
+test('settle leaves an undragged panel to the stylesheet', () => {
+  withWindow(() => {
+    const handle = fakeHandle();
+    const panel = fakePanel();
+    const drag = makeDraggable(panel, handle);
+
+    panel.offsetWidth = 420;
+    drag.settle();
+
+    assert.strictEqual(panel.style.left, undefined);
+    assert.strictEqual(panel.style.bottom, undefined, 'the corner anchoring is untouched');
+  });
+});

@@ -14,6 +14,13 @@ import { PANEL_CSS as QA_WIDGET_CSS } from '../extension/qa/styles.js';
 // The two lists are written out by hand on purpose. Adding a class to either
 // screen has to be a deliberate edit in one place — that is what makes this test
 // notice an overlap, instead of a browser noticing it for someone later.
+//
+// Which is also the limit of what any of this proves: the lists are trusted, not
+// derived. Nothing here reads the two modules to check that they really do set
+// every name listed, so the check is worth exactly as much as the discipline of
+// editing a list in the same commit as the class it describes. The direction it
+// does prove is the stylesheet's: a rule naming a class no list declares fails,
+// whether it was never set or has stopped being.
 
 // Set by extension/phases/panel.js on the phase list.
 const PHASE_CLASSES = [
@@ -100,11 +107,13 @@ const QA_CLASSES = [
 // reuse was chosen, never to quiet the check above.
 const SHARED_CLASSES = ['row', 'badge', 'icon', 'error'];
 
-// Every class named by a compound selector that carries exactly one class — the
-// kind that matches an element on the strength of that one name alone, wherever
-// in the shadow root it sits. A compound with two (`.case.passed`, `.panel.wide`)
-// cannot cross screens, since no element carries both vocabularies' names.
-const singleClassSelectors = (css) => {
+// Every class the stylesheet names anywhere, compounds included. A single-class
+// compound is the one that can cross screens — it matches on the strength of that
+// one name alone, wherever in the shadow root it sits — but a compound's second
+// name is just as capable of outliving the element it was written for
+// (`.phase.fading` survived `fading` being delisted), and a rule for a class no
+// screen sets is dead either way.
+const classesNamed = (css) => {
   const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const found = new Set();
 
@@ -112,8 +121,7 @@ const singleClassSelectors = (css) => {
     for (const selector of prelude.split(',')) {
       for (const compound of selector.trim().split(/[\s>+~]+/)) {
         const bare = compound.replace(/::?[a-zA-Z-]+(\([^)]*\))?/g, '');
-        const classes = [...bare.matchAll(/\.([a-zA-Z0-9_-]+)/g)].map((m) => m[1]);
-        if (classes.length === 1) found.add(classes[0]);
+        for (const [, name] of bare.matchAll(/\.([a-zA-Z0-9_-]+)/g)) found.add(name);
       }
     }
   }
@@ -132,9 +140,9 @@ test('the two screens share no class name that is not declared shared', () => {
   }
 });
 
-test('every bare single-class rule names a class one of the screens sets', () => {
+test('every class the stylesheet names is one the screens set', () => {
   const known = new Set([...PHASE_CLASSES, ...QA_CLASSES, ...SHARED_CLASSES]);
-  const unknown = singleClassSelectors(PANEL_CSS).filter((name) => !known.has(name));
+  const unknown = classesNamed(PANEL_CSS).filter((name) => !known.has(name));
   assert.deepEqual(unknown, [], 'a rule for a class no screen sets is either dead or a name nobody declared');
 });
 
@@ -182,8 +190,8 @@ const QA_WIDGET_CLASSES = [
   'ended',
 ];
 
-test('every bare single-class rule in the QA widget names a class its panel sets', () => {
+test('every class the QA widget’s stylesheet names is one its panel sets', () => {
   const known = new Set(QA_WIDGET_CLASSES);
-  const unknown = singleClassSelectors(QA_WIDGET_CSS).filter((name) => !known.has(name));
+  const unknown = classesNamed(QA_WIDGET_CSS).filter((name) => !known.has(name));
   assert.deepEqual(unknown, [], 'a rule for a class the panel never sets is either dead or a name nobody declared');
 });
