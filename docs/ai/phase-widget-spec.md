@@ -151,7 +151,7 @@ The five stages, in canonical order:
 | `build` | dev, checks |
 | `review` | code-review, crit |
 | `testing` | qa-cases, qa-manual |
-| `handover` | comments, tests-review, mr, mr-review, cleanup |
+| `handover` | comments, tests-review, mr, mr-review, merged, cleanup |
 
 English, not Russian, because repo text is Ukrainian or English only
 (`.claude/CLAUDE.md`) and `/board` already prints English. Contiguity and the
@@ -221,13 +221,26 @@ POST /api/phase/checks   Body: { "task": "HRS-1234", "action": "skip", "detail":
 POST /api/phase/dev      Body: { "task": "HRS-1234", "action": "reset", "detail": "reason=qa-feedback" }
 ```
 
-`action` ∈ `done` | `skip` | `reset` | `clear`.
+`action` ∈ `done` | `skip` | `reset` | `clear` | `wip`.
 
 `clear` was added 2026-08-19: it unrecords one phase and nothing else, and does not
 bump the round. The herdr TUI unticks with it, having found the cascade too costly
 to correct a mis-tick. The browser widget still unticks with `reset`; both are
 valid on the wire, and if the two gestures prove confusing the browser is the one
-to move, since `clear` is the safer default. `detail` is optional; when present, it is
+to move, since `clear` is the safer default.
+
+A fifteenth phase, **`merged`**, was inserted between `mr-review` and `cleanup` on
+2026-08-19: the MR actually landing, which `cleanup` used to conflate with tearing
+the task down. Nothing closes it automatically yet. A widget must not assume the
+list is fourteen long — read it from the payload, which is why no count appears in
+this contract.
+
+`wip` was added the same day: a manual "being worked on right now" marker. It does
+not count as passed, nothing sets it automatically, and nothing needs to unset it —
+any later record for that phase replaces it. A widget rendering it should show it
+distinctly from both "done" and "not started"; a widget that does not know the state
+yet will fall through to its unknown-state rendering, which is why the field is
+additive rather than a change to the existing four. `detail` is optional; when present, it is
 free-form text passed straight through to the CLI's `--detail`.
 
 The server calls `task-phase.mjs` with `--by widget`, `phase-server` records
