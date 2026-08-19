@@ -12,7 +12,9 @@ import { PHASE_BASE } from './config.js';
 // otherwise concatenate onto PHASE_BASE and redirect the fetch to a different
 // origin, so it is checked here rather than trusted.
 const STATE_PATH = /^\/api\/phase\/state\?task=[A-Z][A-Z0-9]*-\d+$/;
-const MUTATION_PATH = /^\/api\/phase\/[a-z][a-z0-9-]*$/;
+// `state` is the read endpoint's own name, not a phase — excluded so this stays
+// the two shapes the contract has and not a third nobody serves.
+const MUTATION_PATH = /^\/api\/phase\/(?!state$)[a-z][a-z0-9-]*$/;
 
 export const allows = (method, path) => {
   if (method === 'GET') return STATE_PATH.test(path);

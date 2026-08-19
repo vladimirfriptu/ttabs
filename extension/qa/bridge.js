@@ -2,6 +2,7 @@
 // plain JSON — the service worker does the actual fetching.
 
 import { QA_MESSAGE } from './config.js';
+
 export { readTaskKey } from '../lib/task-key.js';
 
 const send = async (method, path, body) => {

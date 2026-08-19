@@ -28,3 +28,11 @@ test('the method decides which shape applies', () => {
   assert.strictEqual(allows('GET', '/api/phase/checks'), false);
   assert.strictEqual(allows('DELETE', '/api/phase/checks'), false);
 });
+
+test('the read endpoint is not a mutation target', () => {
+  assert.strictEqual(allows('POST', '/api/phase/state'), false);
+  assert.strictEqual(allows('POST', '/api/phase/state?task=ACME-1234'), false);
+  // Only the exact name is excluded — a phase whose name starts with it is a
+  // phase like any other.
+  assert.strictEqual(allows('POST', '/api/phase/stateful'), true);
+});
