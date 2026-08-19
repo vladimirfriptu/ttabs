@@ -23,7 +23,11 @@ const phaseRow = (entry, onCheck, onReset) => {
 
   const checkbox = el('input');
   checkbox.type = 'checkbox';
-  checkbox.checked = entry.state === 'done' || entry.state === 'open';
+  checkbox.checked = entry.state === 'done';
+  // A tick would read as "ran, nothing outstanding", which is the opposite of
+  // what `open` records; the dash is what the state actually means. Still
+  // enabled — closing an open phase by hand is a mutation the server accepts.
+  checkbox.indeterminate = entry.state === 'open';
   // Undoing a closed phase is `reset`, which cascades — that is the button
   // below, behind a confirmation, and never this checkbox. `open` stays
   // clickable: a human may close it by hand, only never author it.
@@ -39,15 +43,20 @@ const phaseRow = (entry, onCheck, onReset) => {
 
   const name = el('span', 'name', entry.phase);
 
-  const reset = el('button', 'reset', '⟲');
-  reset.type = 'button';
-  reset.title = `reset ${entry.phase} and everything after it`;
-  reset.addEventListener('click', () => onReset(entry.phase));
-
   row.append(checkbox, name);
   if (entry.state === 'skip') row.append(el('span', 'badge skipped', 'skipped'));
   if (entry.state === 'open') row.append(el('span', 'badge open', 'open'));
-  row.append(reset);
+
+  // Nothing to undo on a phase the journal has never recorded — and offering it
+  // would still raise a confirmation naming every phase after it.
+  if (entry.state !== '') {
+    const reset = el('button', 'reset', '⟲');
+    reset.type = 'button';
+    reset.title = `reset ${entry.phase} and everything after it`;
+    reset.addEventListener('click', () => onReset(entry.phase));
+    row.append(reset);
+  }
+
   wrapper.append(row);
 
   // `open` means the phase ran and left something outstanding, and the detail is
@@ -87,9 +96,22 @@ export const createPanel = ({ onCheck, onReset }) => {
   const count = el('span', 'count');
   const chevron = el('span', 'chevron', '–');
   const body = el('div', 'body');
+  // A message that belongs to no single row — the server refusing the whole
+  // read, say — has nowhere else to go, and the foot only exists while there is
+  // one to show.
+  const foot = el('div', 'foot');
+  foot.hidden = true;
+  let noticeText = '';
+
+  // The payload the body currently shows, as JSON. Two consecutive polls almost
+  // always carry the same one, and rebuilding the rows throws away whatever had
+  // the keyboard focus — including a ⟲, which is only visible at all for as long
+  // as `.reset:focus` holds.
+  let rendered = null;
 
   const applyCollapsed = () => {
     body.hidden = collapsed;
+    foot.hidden = collapsed || noticeText === '';
     panel.classList.toggle('collapsed', collapsed);
     head.setAttribute('aria-label', collapsed ? 'expand' : 'collapse');
     chevron.textContent = collapsed ? '🧭' : '–';
@@ -102,7 +124,7 @@ export const createPanel = ({ onCheck, onReset }) => {
   });
 
   head.append(task, round, count, chevron);
-  panel.append(head, body);
+  panel.append(head, body, foot);
   root.append(style, panel);
   document.documentElement.append(host);
 
@@ -115,12 +137,21 @@ export const createPanel = ({ onCheck, onReset }) => {
       round.hidden = state.round <= 1;
       count.textContent = `${closedCount(state.phases)}/${state.phases.length}`;
 
-      const scrollTop = body.scrollTop;
-      body.replaceChildren();
-      for (const entry of state.phases) body.append(phaseRow(entry, onCheck, onReset));
-      if (!hasRecords(state.phases)) body.append(el('div', 'empty', 'no records yet'));
-      else if (state.next) body.append(el('div', 'empty', `next: ${state.next}`));
-      body.scrollTop = scrollTop;
+      const payload = JSON.stringify(state);
+      if (payload !== rendered) {
+        rendered = payload;
+        const scrollTop = body.scrollTop;
+        body.replaceChildren();
+        for (const entry of state.phases) body.append(phaseRow(entry, onCheck, onReset));
+        if (!hasRecords(state.phases)) body.append(el('div', 'empty', 'no records yet'));
+        else if (state.next) body.append(el('div', 'empty', `next: ${state.next}`));
+        body.scrollTop = scrollTop;
+      } else {
+        // The rebuild is what normally clears a row's error; without one, the
+        // same wiping has to happen by hand or a failed click's message would
+        // outlive every explanation the server has since given.
+        for (const stale of body.querySelectorAll('.error')) stale.remove();
+      }
 
       applyCollapsed();
     },
@@ -138,6 +169,24 @@ export const createPanel = ({ onCheck, onReset }) => {
         collapsed = false;
         applyCollapsed();
       }
+    },
+
+    // A read the server refused fits no row — the panel is showing the last
+    // journal it managed to get, and nothing in it is what went wrong. Expanding
+    // on a notice rather than leaving it behind a fold.
+    showNotice(message) {
+      if (noticeText === message) return;
+      noticeText = message;
+      foot.textContent = message;
+      if (collapsed) collapsed = false;
+      applyCollapsed();
+    },
+
+    clearNotice() {
+      if (noticeText === '') return;
+      noticeText = '';
+      foot.textContent = '';
+      applyCollapsed();
     },
 
     destroy() {

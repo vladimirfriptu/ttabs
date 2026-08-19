@@ -117,4 +117,13 @@ export const PANEL_CSS = `
   .error { margin-left: 22px; color: #b00020; font-size: 12px; }
 
   .empty { padding: 4px 12px 8px; color: #888; font-size: 12px; }
+
+  /* Below every row rather than beside one, because what goes here belongs to
+     the whole read: the panel above it is the last journal that arrived. */
+  .foot {
+    padding: 7px 12px;
+    border-top: 1px solid #e6e6e6;
+    color: #b00020;
+    font-size: 12px;
+  }
 `;
