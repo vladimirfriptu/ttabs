@@ -6,7 +6,8 @@
 
 import { trackedGroups, keyForTab } from './chrome/groups.js';
 import { rememberActiveTab, restoreFocus } from './chrome/focus.js';
-import { QA_MESSAGE, QA_TASK_KEY_MESSAGE } from './qa/config.js';
+import { QA_MESSAGE } from './qa/config.js';
+import { TASK_KEY_MESSAGE } from './lib/task-key.js';
 import { call } from './qa/client.js';
 import { readSite, readTitles, writeTitles } from './chrome/store.js';
 import { planUpdates } from './lib/plan.js';
@@ -74,7 +75,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === QA_TASK_KEY_MESSAGE) {
+  if (message?.type === TASK_KEY_MESSAGE) {
     // A message from anywhere other than a tab (the control page, say) has no
     // group to resolve.
     if (!sender.tab) {
