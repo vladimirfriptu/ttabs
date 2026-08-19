@@ -7,7 +7,7 @@
 // three states of the same timer, and an interval can only express one.
 
 import { POLL_MS, DEAD_RETRY_MS, TASK_KEY_PATTERN, PHASE_BASE } from './config.js';
-import { readState, mutate } from './bridge.js';
+import { readState, mutate, HttpStatusError } from './bridge.js';
 import { readTaskKey } from '../lib/task-key.js';
 import { createPanel } from './panel.js';
 import { applyAction, resetWarning } from '../lib/phases.js';
@@ -33,6 +33,13 @@ export const startPhaseWatch = () => {
   // whatever the click is changing — the mutation's own reply is — so read()
   // skips painting its snapshot but still keeps the timer running.
   let mutating = 0;
+
+  // How many mutation answers have been rendered, ever. It covers the ordering
+  // `mutating` cannot: a GET that left before a click and lands after that
+  // click's answer has already been painted, by which time `mutating` is back
+  // to zero and the snapshot in hand predates the change. read() captures this
+  // before its awaits and drops its answer if it has moved since.
+  let mutated = 0;
 
   // The last "why nothing is showing" reason printed for this tab, or null when
   // there is nothing to explain. Printed once per reason, and again only once
@@ -98,6 +105,7 @@ export const startPhaseWatch = () => {
 
   const read = async () => {
     let at = epoch;
+    const mutatedAt = mutated;
 
     let tabKey;
     try {
@@ -128,15 +136,29 @@ export const startPhaseWatch = () => {
     try {
       next = await readState(key);
     } catch (e) {
+      if (e instanceof HttpStatusError) {
+        // The server is up and refusing — a 409 (two branches carry this task
+        // key) is a state its contract names and the owner acts on. Closing the
+        // panel and going quiet for a minute is what an absent server looks
+        // like, so this keeps the panel, says so where it can be seen, and
+        // holds the ordinary cadence.
+        note(`the phase server answered ${e.status} for ${key}`);
+        panel?.showNotice(`the phase server answered ${e.status}`);
+        deadUntil = 0;
+        schedule(POLL_MS);
+        return;
+      }
       markDead(`cannot reach the phase server at ${PHASE_BASE} —`, e.message);
       return;
     }
 
-    // A mutation's answer can land while this GET is still in flight; that
-    // answer is fresher, so this read yields to it instead of overwriting it —
-    // and the mutation already rescheduled the timer, so there is nothing left
-    // to arm here.
-    if (epoch !== at) return;
+    // Something fresher has already been painted since this read left: the
+    // panel closed or moved to another task (epoch), or a mutation's answer —
+    // the journal after the server's own fold, not a guess — landed first
+    // (mutated). Whoever painted it re-armed the timer, so there is nothing to
+    // arm here. Neither counter covers a GET still in flight while a mutation
+    // is outstanding; `mutating` below is what holds that ordering.
+    if (epoch !== at || mutated !== mutatedAt) return;
 
     deadUntil = 0;
 
@@ -158,6 +180,9 @@ export const startPhaseWatch = () => {
     }
 
     note(null);
+    // A poll that got an answer is the proof that whatever the foot complained
+    // about is over.
+    panel?.clearNotice();
 
     // A mutation is in flight for this exact task: its own answer is the
     // authoritative one for whatever it is changing, so this poll's snapshot
@@ -210,11 +235,20 @@ export const startPhaseWatch = () => {
 
     // The server's answer replaces the optimistic guess wholesale — it is the
     // journal after the fold, which may differ from the single field we flipped.
+    // Counting it is what makes a GET older than this answer drop its snapshot.
+    mutated += 1;
     show(answer);
     schedule(POLL_MS);
   };
 
+  // A confirmation is modal, so a second click cannot land while it is open —
+  // but it can while the accepted reset is still in flight, and asking again
+  // about a cascade already under way is worse than ignoring the click.
+  let resetting = false;
+
   const onReset = async (phase) => {
+    if (resetting) return;
+
     // The cascade is the server's, and it reaches every later phase — so the
     // confirmation names them, read off the canonical order in the response
     // rather than a list this widget keeps of its own.
@@ -222,6 +256,7 @@ export const startPhaseWatch = () => {
     const at = epoch;
 
     let answer;
+    resetting = true;
     mutating += 1;
     try {
       answer = await mutate(phase, { task: key, action: 'reset' });
@@ -230,11 +265,13 @@ export const startPhaseWatch = () => {
       panel?.showError(phase, `not reset: ${e.message}`);
       return;
     } finally {
+      resetting = false;
       mutating -= 1;
     }
 
     if (epoch !== at) return;
 
+    mutated += 1;
     show(answer);
     schedule(POLL_MS);
   };

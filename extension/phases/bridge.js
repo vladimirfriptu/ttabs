@@ -4,6 +4,19 @@
 import { PHASE_MESSAGE } from './config.js';
 import { normalizeState } from '../lib/phases.js';
 
+// An HTTP status that is neither 200 nor 404 means the server is up and
+// refusing — a 409 (two branches carry the same task key) is a case its own
+// contract names. It rejects like a transport failure, so it carries the status
+// as well: the caller must not read "the server is here and says 409" as "there
+// is no server", which is the difference between a notice and a minute of
+// silence.
+export class HttpStatusError extends Error {
+  constructor(status) {
+    super(`the server answered ${status}`);
+    this.status = status;
+  }
+}
+
 const send = async (method, path, body) => {
   const reply = await chrome.runtime.sendMessage({ type: PHASE_MESSAGE, method, path, body });
   if (!reply) throw new Error('the extension did not answer');
@@ -19,7 +32,7 @@ const send = async (method, path, body) => {
 export const readState = async (task) => {
   const reply = await send('GET', `/api/phase/state?task=${task}`);
   if (reply.status === 404) return null;
-  if (!reply.ok) throw new Error(`the server answered ${reply.status}`);
+  if (!reply.ok) throw new HttpStatusError(reply.status);
 
   const state = normalizeState(reply.data);
   if (!state) throw new Error('the server answered something that is not a phase state');
@@ -34,7 +47,7 @@ export const mutate = async (phase, { task, action, detail }) => {
   if (detail) body.detail = detail;
 
   const reply = await send('POST', `/api/phase/${phase}`, body);
-  if (!reply.ok) throw new Error(`the server answered ${reply.status}`);
+  if (!reply.ok) throw new HttpStatusError(reply.status);
 
   const state = normalizeState(reply.data);
   if (!state) throw new Error('the server accepted the change but did not answer with a state');
