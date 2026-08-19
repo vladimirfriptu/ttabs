@@ -289,7 +289,16 @@ export const createPanel = ({ onCheck, onChipQa }) => {
       // tick optimistically — so without this, ticking a phase would cost a whole
       // Tab traversal to reach the next one. Only a payload change gets here; a
       // preview never rebuilds and so never needs saving from.
-      const focusedPhase = root.activeElement?.closest('.phase')?.dataset.phase ?? '';
+      //
+      // The kind of control is remembered along with the row: restoring a row's
+      // box to someone who was on its chip would put a write under the next Space
+      // they press, and that write clears the phase and every one after it.
+      const focused = root.activeElement;
+      let focusedKind = '';
+      if (focused?.classList.contains('box')) focusedKind = '.box';
+      else if (focused?.classList.contains('chip')) focusedKind = '.chip';
+      const focusedRow = focusedKind ? focused.closest('.phase') : null;
+      const focusedPhase = focusedRow?.dataset.phase ?? '';
 
       body.replaceChildren();
 
@@ -309,9 +318,10 @@ export const createPanel = ({ onCheck, onChipQa }) => {
       // whole panel up and down under the pointer.
       body.append(hint);
       body.scrollTop = scrollTop;
-      // The restored box's own focusin recomputes the preview against the list
-      // just drawn, so nothing here has to say what it should be.
-      if (focusedPhase) body.querySelector(`.phase[data-phase="${CSS.escape(focusedPhase)}"] .box`)?.focus();
+      // The restored control's own focusin recomputes the preview against the list
+      // just drawn, so nothing here has to say what it should be. A row that has
+      // since lost its chip restores nothing, which is the honest answer.
+      if (focusedPhase) body.querySelector(`.phase[data-phase="${CSS.escape(focusedPhase)}"] ${focusedKind}`)?.focus();
       applyPeek();
     } else {
       // The rebuild is what normally clears a row's error; without one, the
