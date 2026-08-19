@@ -10,11 +10,11 @@
 // downgrade and duplicate suppression all belong to the server. `cascadeFrom`
 // only predicts what the server is about to do, to put it in a confirmation.
 
+import { safeHref } from './href.js';
+
 export const PHASE_STATES = new Set(['done', 'skip', 'open']);
 
 const text = (value) => (typeof value === 'string' ? value : '');
-
-const LINK_SCHEMES = new Set(['http:', 'https:']);
 
 // The one field the widget hands to the page it is injected into, so it is the one
 // the payload is not trusted about: a `javascript:` or `data:` url reaching an
@@ -24,17 +24,11 @@ const usableAction = (raw) => {
   if (raw.kind === 'qa') return { kind: 'qa' };
   if (raw.kind !== 'link') return null;
   if (typeof raw.label !== 'string' || raw.label === '') return null;
-  if (typeof raw.url !== 'string' || raw.url === '') return null;
 
-  let parsed;
-  try {
-    parsed = new URL(raw.url);
-  } catch {
-    return null;
-  }
-  if (!LINK_SCHEMES.has(parsed.protocol)) return null;
+  const url = safeHref(raw.url);
+  if (url === '') return null;
 
-  return { kind: 'link', label: raw.label, url: raw.url };
+  return { kind: 'link', label: raw.label, url };
 };
 
 const normalizePhase = (raw) => {
