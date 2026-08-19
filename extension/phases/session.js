@@ -61,11 +61,31 @@ export const startPhaseWatch = () => {
   let qaTimer = null;
   let qaReading = false;
   let qaFinishing = false;
+
+  // The checklist's half of `epoch`, bumped every time the screen goes away.
+  // A QA write captures it before its await and compares after, for the reason
+  // the phase side does: `qaOpen` alone cannot tell "still the same screen"
+  // from "left and drilled back into the same phase", and a revert on the
+  // strength of that would restore a snapshot of a session the screen has since
+  // re-read.
+  let qaGen = 0;
+
   // When the last definitive answer arrived, and whether this outage has been
   // explained yet — the same tolerance the QA widget applies, because the reason
   // is the same: a restarting server must not wipe a note being typed.
   let qaLastOk = 0;
   let qaWarned = false;
+
+  // Text on its way to the server, declared beside the rest of the checklist's
+  // state because forgetQa() disposes of it along with the rest.
+  //
+  // Which case a comment belongs to travels with it; the module deliberately does
+  // not catch, so the failure has to be absorbed here — an unhandled rejection in
+  // a timer reaches nobody.
+  const sendComment = (id, text) =>
+    setComment(id, text).catch((e) => panel?.showQaError(id, `not saved: ${e.message}`));
+
+  const comments = createPendingSends(sendComment, COMMENT_DEBOUNCE_MS);
 
   // The last "why nothing is showing" reason printed for this tab, or null when
   // there is nothing to explain. Printed once per reason, and again only once
@@ -112,7 +132,14 @@ export const startPhaseWatch = () => {
     qaFinishing = false;
     qaNotice = null;
     qaWarned = false;
+    qaGen += 1;
     stopQa();
+    // A debounced note is a sentence the developer typed and meant to keep, and
+    // most of the ways out of this screen are not theirs: the tab moved group,
+    // or the journal dropped the action. Their own back blurs the field first,
+    // which has already committed, so this is a no-op on that path. Not awaited
+    // — nothing here can wait, and sendComment absorbs its own failure.
+    comments.flush();
     comments.clear();
   };
 
@@ -267,14 +294,6 @@ export const startPhaseWatch = () => {
     schedule(POLL_MS);
   };
 
-  // Which case a comment belongs to travels with it; the module deliberately does
-  // not catch, so the failure has to be absorbed here — an unhandled rejection in
-  // a timer reaches nobody.
-  const sendComment = (id, text) =>
-    setComment(id, text).catch((e) => panel?.showQaError(id, `not saved: ${e.message}`));
-
-  const comments = createPendingSends(sendComment, COMMENT_DEBOUNCE_MS);
-
   const qaPoll = async () => {
     if (qaOpen === '' || qaReading) return;
     qaReading = true;
@@ -292,9 +311,12 @@ export const startPhaseWatch = () => {
       // screen that is a few seconds stale. Only a real absence empties it —
       // and only a screen with a checklist on it has anything worth the wait,
       // so one that never got one answers at once instead of sitting blank.
+      // The reason travels with it: a server that did not answer has established
+      // nothing about whether a session exists, and the screen for that says so
+      // rather than offering to record the phase on the strength of it.
       if (qaState === null || Date.now() - qaLastOk >= POLL_TOLERANCE_MS) {
         qaState = null;
-        panel?.showQaEmpty();
+        panel?.showQaEmpty('unreachable');
       }
       scheduleQa();
       return;
@@ -316,7 +338,7 @@ export const startPhaseWatch = () => {
     if (!next || !matchesTask(next, key)) {
       qaNote(next ? `the running QA session is ${next.task}'s, not this tab's ${key} — no checklist to show` : null);
       qaState = null;
-      panel?.showQaEmpty();
+      panel?.showQaEmpty('no-session');
       scheduleQa();
       return;
     }
@@ -343,6 +365,7 @@ export const startPhaseWatch = () => {
     if (!qaState) return;
 
     const previous = qaState;
+    const at = qaGen;
     qaState = applyPassed(qaState, id, passed);
     // The box is drawn, not native, so it only shows the flip once re-rendered.
     panel?.renderQa(qaState);
@@ -350,6 +373,11 @@ export const startPhaseWatch = () => {
     try {
       await setPassed(id, passed);
     } catch (e) {
+      // The screen this snapshot belongs to is gone — forgetQa() has already
+      // emptied qaState, and restoring it here would leave the next poll's
+      // tolerance branch nursing a checklist nobody is looking at for a full
+      // POLL_TOLERANCE_MS instead of emptying the screen at once.
+      if (qaGen !== at) return;
       // Revert before re-rendering, or the finish warning would count a case the
       // server never recorded as passed.
       qaState = previous;
@@ -375,11 +403,16 @@ export const startPhaseWatch = () => {
     if (warning && !window.confirm(warning)) return;
 
     qaFinishing = true;
+    const at = qaGen;
 
     try {
       await comments.flush();
       await finish('');
     } catch (e) {
+      // The screen left while the finish was on the wire: forgetQa() has already
+      // cleared qaFinishing, and the complaint belongs to a foot that is gone —
+      // or, worse, to the next session's.
+      if (qaGen !== at) return;
       qaFinishing = false;
       // The screen stays up: the CLI on the other end is still blocked, so
       // pretending the session ended would hide that from the developer.
@@ -430,6 +463,7 @@ export const startPhaseWatch = () => {
     const optimistic = action === 'clear' ? clearOne(state, phase) : applyAction(state, phase, action);
     show(optimistic);
     const at = epoch;
+    const mutatedAt = mutated;
 
     let answer;
     mutating += 1;
@@ -442,9 +476,22 @@ export const startPhaseWatch = () => {
       if (epoch !== at) return;
       // Revert before re-rendering: the optimistic tick claimed something the
       // journal does not say, and the panel is the only place that claim exists.
-      state = previous;
-      panel?.render(state, link);
+      //
+      // Unless another mutation's answer landed in the meantime — a second click
+      // while this one was on the wire. That answer is the server's own journal,
+      // and `previous` predates it, so reverting would put a state on screen that
+      // never existed anywhere. The same two counters read() drops a stale GET
+      // on; `epoch` alone does not move for a mutation on the same task.
+      if (mutated === mutatedAt) {
+        state = previous;
+        panel?.render(state, link);
+      }
+      // Said either way: the click failed, and the row it failed on is where that
+      // belongs.
       panel?.showError(phase, `not saved: ${e.message}`);
+      // Armed here rather than left to whichever path happened to arm it last: a
+      // failed write must not be the reason the panel stops re-reading.
+      schedule(POLL_MS);
       return;
     } finally {
       // Unblocks read()'s rendering whether the mutation succeeded or failed —
