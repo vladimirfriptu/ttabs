@@ -14,13 +14,44 @@ export const PHASE_STATES = new Set(['done', 'skip', 'open']);
 
 const text = (value) => (typeof value === 'string' ? value : '');
 
-const normalizePhase = (raw) => ({
-  phase: raw.phase,
-  state: PHASE_STATES.has(raw.state) ? raw.state : '',
-  by: text(raw.by),
-  ts: text(raw.ts),
-  detail: text(raw.detail),
-});
+const LINK_SCHEMES = new Set(['http:', 'https:']);
+
+// The one field the widget hands to the page it is injected into, so it is the one
+// the payload is not trusted about: a `javascript:` or `data:` url reaching an
+// anchor on someone's app is a hole, and a chip is better absent than lying.
+const usableAction = (raw) => {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.kind === 'qa') return { kind: 'qa' };
+  if (raw.kind !== 'link') return null;
+  if (typeof raw.label !== 'string' || raw.label === '') return null;
+  if (typeof raw.url !== 'string' || raw.url === '') return null;
+
+  let parsed;
+  try {
+    parsed = new URL(raw.url);
+  } catch {
+    return null;
+  }
+  if (!LINK_SCHEMES.has(parsed.protocol)) return null;
+
+  return { kind: 'link', label: raw.label, url: raw.url };
+};
+
+const normalizePhase = (raw) => {
+  const entry = {
+    phase: raw.phase,
+    state: PHASE_STATES.has(raw.state) ? raw.state : '',
+    by: text(raw.by),
+    ts: text(raw.ts),
+    detail: text(raw.detail),
+    stage: text(raw.stage),
+  };
+
+  const action = usableAction(raw.action);
+  if (action) entry.action = action;
+
+  return entry;
+};
 
 const usablePhase = (raw) => raw && typeof raw.phase === 'string' && raw.phase !== '';
 
@@ -43,25 +74,48 @@ export const applyAction = (state, phase, action) => ({
   phases: state.phases.map((p) => (p.phase === phase ? { ...p, state: action } : p)),
 });
 
-// A closed phase's control is inert: undoing `done` or `skip` is `reset`, which
-// cascades, and the spec keeps that off the checkbox. `open` stays clickable —
-// what a human may not do is *author* `open`; closing one by hand ("I ran the
-// checks myself") is a mutation the server accepts.
-export const isSettable = (entry) => entry.state === '' || entry.state === 'open';
-
 export const cascadeFrom = (phases, phase) => {
   const at = phases.findIndex((p) => p.phase === phase);
   if (at < 0) return [];
   return phases.slice(at + 1).map((p) => p.phase);
 };
 
-export const resetWarning = (phases, phase) => {
-  const later = cascadeFrom(phases, phase);
-  if (later.length === 0) return `Reset ${phase}? Nothing follows it. Continue?`;
-  return `Resetting ${phase} will also reopen ${later.join(', ')}. Continue?`;
-};
-
 export const closedCount = (phases) =>
   phases.filter((p) => p.state === 'done' || p.state === 'skip').length;
+
+// Groups on a change of stage rather than by collecting equal ones: the server
+// promises the phases of a stage are contiguous, and if it ever breaks that
+// promise two groups is the honest rendering — reordering to repair it would put
+// a second opinion about the canonical order in the widget.
+export const groupByStage = (phases) => {
+  const groups = [];
+  for (const entry of phases) {
+    const last = groups[groups.length - 1];
+    if (last && last.stage === entry.stage) last.phases.push(entry);
+    else groups.push({ stage: entry.stage, phases: [entry] });
+  }
+  for (const group of groups) {
+    group.total = group.phases.length;
+    group.closed = closedCount(group.phases);
+  }
+  return groups;
+};
+
+// What `reset` is about to do, drawn locally so the row responds to the click at
+// once. The cascade itself belongs to the server — this is the same kind of guess
+// as applyAction, and the answer that comes back replaces it wholesale.
+export const clearFrom = (state, phase) => {
+  const at = state.phases.findIndex((p) => p.phase === phase);
+  if (at < 0) return state;
+
+  return {
+    ...state,
+    phases: state.phases.map((p, i) => (i >= at ? { ...p, state: '', detail: '' } : p)),
+  };
+};
+
+// Which phase opens the checklist. The widget never learns its name from anywhere
+// else — that is the whole point of the server saying so.
+export const qaPhase = (phases) => phases.find((p) => p.action?.kind === 'qa')?.phase ?? '';
 
 export const hasRecords = (phases) => phases.some((p) => p.state !== '');
