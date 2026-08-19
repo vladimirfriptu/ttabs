@@ -1,8 +1,9 @@
 // Lives inside the panel's shadow root, so nothing here can leak into the page
 // under test — and nothing the page ships can reach in and restyle the panel.
 //
-// Every value below is lifted from the approved artboard (`design/Staged.dc.html`)
-// rather than chosen here.
+// Every value below is lifted from an approved artboard rather than chosen here:
+// the phase list from `design/Staged.dc.html`, the drilled-in checklist from
+// `design/Testing.dc.html`, and its note field from `design/Notes.dc.html`.
 
 export const PANEL_CSS = `
   :host { all: initial; }
@@ -269,5 +270,229 @@ export const PANEL_CSS = `
     border-top: 1px solid #e6e6e6;
     color: #b00020;
     font-size: 12px;
+  }
+
+  /* ---- the drilled-in screen: the QA session's checklist ----
+     Values from design/Testing.dc.html, the note field's from Notes.dc.html.
+     Nothing here shares a class name with the phase list except .badge, .row,
+     .icon and .error, which carry the same values in both designs — every other
+     rule is its own, because one stylesheet serves both screens. */
+
+  /* The one reason to widen: a case's steps do not read at 360. */
+  .panel.wide { width: 420px; }
+
+  /* Its own flex column, so .qa-body scrolls inside the panel's max-height
+     instead of the whole screen growing past it. */
+  .qa { display: flex; flex-direction: column; min-height: 0; }
+
+  .qa-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border-bottom: 1px solid #e6e6e6;
+    /* The drag handle for this screen — the phase header, which is the handle
+       for the other one, is hidden while this is up. */
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .panel.dragging .qa-head { cursor: grabbing; }
+
+  .back {
+    flex: none;
+    display: flex;
+    align-items: center;
+    margin: 0 0 0 -3px;
+    padding: 3px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+  }
+  .back:hover { background: #ececec; }
+
+  .qa-phase { font-weight: 600; }
+  .qa-key { color: #a0a0a0; font-size: 13px; }
+  /* Pushed to the far edge by its own margin, so a long phase name takes the
+     room rather than the tally moving. */
+  .qa-tally { margin-left: auto; color: #777; }
+
+  .qa-body { overflow-y: auto; padding: 5px 0; }
+
+  .area {
+    padding: 7px 12px 2px;
+    color: #777;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .case { padding: 4px 12px; }
+
+  /* Nudged down off the baseline the row aligns on, so the box sits with the
+     first line of a title rather than under it. */
+  .check {
+    box-sizing: border-box;
+    position: relative;
+    top: 2px;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #b4b4b4;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+  }
+  .check:hover { border-color: #8a8a8a; }
+  .case.passed .check { background: #3f7a3f; border-color: #3f7a3f; }
+
+  .title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  /* A case the session says no longer applies: struck through and dimmed, still
+     there, because the checklist is the QA server's list and not this widget's
+     to edit. */
+  .case.outdated .title { color: #999; text-decoration: line-through; }
+
+  .badge.new { background: #e3f2e3; color: #2b6b2b; }
+  .badge.updated { background: #fff3cd; color: #7a5c00; }
+
+  /* Indented past the box and ruled, the way the phase list indents secondary
+     matter — the steps belong to the title above them. */
+  .steps {
+    margin: 5px 0 7px 26px;
+    padding-left: 9px;
+    border-left: 2px solid #eee;
+    color: #444;
+  }
+  .step { display: flex; gap: 6px; }
+  .step-n { flex: none; color: #a0a0a0; }
+  .expected { margin-top: 3px; color: #222; }
+
+  .note-box { margin: 5px 0 7px 26px; }
+
+  /* The note reuses the left rule the panel already indents secondary matter
+     with, in amber — a human's words read apart from the machine's metadata. It
+     grows with what is typed: no fixed box, no resize grip. field-sizing is
+     Chrome-only, which is the whole audience of an unpacked Chrome extension —
+     so no input handler measuring scrollHeight either. */
+  .quoted {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1px 0 1px 9px;
+    font: inherit;
+    color: #4a3a10;
+    background: none;
+    border: 0;
+    border-left: 2px solid #f0dfae;
+    resize: none;
+    outline: none;
+    overflow: hidden;
+    field-sizing: content;
+    min-height: 1.4em;
+  }
+  .quoted:focus { border-left-color: #d99b00; background: #fffdf6; }
+  .quoted::placeholder { color: #b0a68a; }
+
+  /* What the folded case shows instead of the field: the fold hides what to do,
+     never what was found. */
+  .comment-text {
+    margin: 5px 0 7px 26px;
+    padding-left: 9px;
+    border-left: 2px solid #f0dfae;
+    color: #6a5a2a;
+    font-size: 13px;
+    white-space: pre-wrap;
+  }
+
+  /* Below the cases and tinted, because it is the session talking about the
+     requirements rather than about a case. */
+  .discrepancies {
+    margin-top: 7px;
+    padding: 7px 12px;
+    border-top: 1px solid #e6e6e6;
+    background: #fcfaf5;
+  }
+  .discrepancies-title {
+    margin-bottom: 5px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #7a5c00;
+  }
+  .discrepancy + .discrepancy { margin-top: 5px; }
+  .discrepancy-summary { font-weight: 600; }
+  .discrepancy-meta { color: #666; font-size: 13px; }
+
+  .qa-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 9px 12px;
+    border-top: 1px solid #e6e6e6;
+  }
+  .finish {
+    display: block;
+    width: 100%;
+    padding: 7px;
+    border: 0;
+    border-radius: 5px;
+    font: inherit;
+    text-align: center;
+    color: #fff;
+    background: #2b6b2b;
+    cursor: pointer;
+  }
+  /* Still cases to go: the action stays available — finishing early is a real
+     choice, and the confirmation is where it is questioned — but it stops
+     looking like the end of a finished list. */
+  .finish.remaining { background: #7d8a7d; }
+  .finish-note { color: #888; font-size: 12px; }
+
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 14px 12px;
+  }
+  .empty-line { color: #555; }
+  .empty-hint { color: #888; font-size: 12px; }
+  .close-without {
+    padding: 3px 8px;
+    font: inherit;
+    font-size: 13px;
+    color: #333;
+    background: #f4f4f4;
+    border: 1px solid #d8d8d8;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .close-without:hover { background: #ececec; }
+
+  /* The same ring the phase list draws, for the same reason: the user agent
+     draws none inside this shadow root that survived testing. The note field is
+     not in the list — it says it has the focus with its own amber rule. */
+  .back:focus-visible,
+  .check:focus-visible,
+  .title:focus-visible,
+  .finish:focus-visible,
+  .close-without:focus-visible {
+    outline: 2px solid #3f7a3f;
+    outline-offset: 2px;
   }
 `;
