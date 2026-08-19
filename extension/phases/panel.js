@@ -285,6 +285,12 @@ export const createPanel = ({ onCheck, onChipQa }) => {
     if (payload !== rendered) {
       rendered = payload;
       const scrollTop = body.scrollTop;
+      // A keyboard write rebuilds the list on the spot — session.js renders the
+      // tick optimistically — so without this, ticking a phase would cost a whole
+      // Tab traversal to reach the next one. Only a payload change gets here; a
+      // preview never rebuilds and so never needs saving from.
+      const focusedPhase = root.activeElement?.closest('.phase')?.dataset.phase ?? '';
+
       body.replaceChildren();
 
       let index = 0;
@@ -303,6 +309,9 @@ export const createPanel = ({ onCheck, onChipQa }) => {
       // whole panel up and down under the pointer.
       body.append(hint);
       body.scrollTop = scrollTop;
+      // The restored box's own focusin recomputes the preview against the list
+      // just drawn, so nothing here has to say what it should be.
+      if (focusedPhase) body.querySelector(`.phase[data-phase="${CSS.escape(focusedPhase)}"] .box`)?.focus();
       applyPeek();
     } else {
       // The rebuild is what normally clears a row's error; without one, the

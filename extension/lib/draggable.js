@@ -68,11 +68,18 @@ export const makeDraggable = (panel, handle) => {
     // A move with no button held, while an origin is still set, means the press
     // ended somewhere this listener never saw it: nothing is captured until the
     // threshold, so a flick that left the header before those 4px sent its
-    // pointerup to another node and release() never ran. Left alone, the stale
-    // origin makes the next bare hover over the header cross the threshold and
-    // carry the panel off with the cursor.
+    // pointerup to another node, and a pointerup lost to window deactivation or
+    // a system dialog never arrives at all. Left alone, the stale origin makes
+    // the next bare hover over the header cross the threshold and carry the
+    // panel off with the cursor. Ending the drag properly rather than only
+    // forgetting the origin is what also drops the grabbing cursor and clears
+    // `moved`, which would otherwise swallow the next click on the header.
     if (event.buttons === 0) {
-      origin = null;
+      release(event);
+      // Cleared here and not in release(), which runs on the pointerup of an
+      // ordinary drag and has to leave `moved` standing for the click that
+      // follows it. This press produces no such click — it is already over.
+      moved = false;
       return;
     }
 

@@ -63,9 +63,10 @@ const fakePanel = () => ({
   offsetHeight: 400,
   getBoundingClientRect: () => ({ left: 100, top: 200 }),
   classList: {
-    added: [],
-    add(name) { this.added.push(name); },
-    remove() {},
+    names: new Set(),
+    add(name) { this.names.add(name); },
+    remove(name) { this.names.delete(name); },
+    has(name) { return this.names.has(name); },
   },
 });
 
@@ -141,6 +142,47 @@ test('a press whose release went elsewhere does not turn the next hover into a d
 
     move(handle, { x: 210, y: 310 }, 0);
     assert.strictEqual(panel.style.left, undefined, 'still hovering, still not dragging');
+  });
+});
+
+// The guard has to end the drag, not just ignore the move: a pointerup lost to
+// window deactivation or a system dialog arrives as the next move with no button
+// held, and a drag left open keeps the grabbing cursor and swallows the next
+// click on the header.
+test('a button-less move after the threshold ends the drag it interrupted', () => {
+  withWindow(() => {
+    const handle = fakeHandle();
+    const panel = fakePanel();
+    const drag = makeDraggable(panel, handle);
+
+    press(handle, { x: 50, y: 50 });
+    move(handle, { x: 70, y: 50 });
+    assert.strictEqual(drag.moved(), true);
+    assert.strictEqual(panel.classList.has('dragging'), true);
+
+    move(handle, { x: 90, y: 50 }, 0);
+
+    assert.strictEqual(panel.classList.has('dragging'), false, 'the grab cursor would stick');
+    assert.strictEqual(drag.moved(), false, 'the next click on the header would be swallowed');
+    assert.strictEqual(handle.releases, 1, 'the capture it took is not released');
+  });
+});
+
+// The other side of that: an ordinary drag ends in a click on the handle, and
+// the caller's click listener reads moved() to stand aside. It has to still be
+// true at that point.
+test('an ordinary release leaves moved() standing for the click that follows', () => {
+  withWindow(() => {
+    const handle = fakeHandle();
+    const panel = fakePanel();
+    const drag = makeDraggable(panel, handle);
+
+    press(handle, { x: 50, y: 50 });
+    move(handle, { x: 70, y: 50 });
+    handle.fire('pointerup', { pointerId: 1 });
+
+    assert.strictEqual(drag.moved(), true);
+    assert.strictEqual(panel.classList.has('dragging'), false);
   });
 });
 
