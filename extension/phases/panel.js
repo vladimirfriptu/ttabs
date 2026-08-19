@@ -104,7 +104,9 @@ const phaseRow = (entry, onCheck, onChipQa) => {
   });
 
   box.addEventListener('keydown', (event) => {
-    if (event.key !== ' ' && event.key !== 'Enter') return;
+    // `code`, not `key`: Option+Space on macOS yields U+00A0 rather than a space,
+    // so gating on the character would drop the one chord that means "skip".
+    if (event.code !== 'Space' && event.key !== 'Enter') return;
     // A held key repeats; the mouse cannot produce that, and neither should the
     // keyboard — every repeat would be another write.
     if (event.repeat) return;

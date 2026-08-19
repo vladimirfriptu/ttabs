@@ -289,7 +289,7 @@ export const createQaView = ({
 
       const box = el('div', 'empty');
       box.append(
-        el('div', 'empty-line', 'no checklist — no QA session is running'),
+        el('div', 'empty-line', 'no checklist — no QA session is running for this task'),
         el('div', 'empty-hint', "start one in the task's session and the cases appear here by themselves"),
       );
       const close = el('button', 'close-without', 'close the phase without a checklist');

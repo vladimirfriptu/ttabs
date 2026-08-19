@@ -81,12 +81,17 @@ protocol it did not design.
 Each phase is in one of four states: recorded (`done`), skipped, `open` — the
 phase ran and left something outstanding, and the panel shows why — or not yet
 reached. Clicking a phase's checkbox closes it; alt-click skips it instead. The
-keyboard reaches the same write: Tab to a box, then Space or Enter.
+keyboard reaches both: Tab to a box, then Space or Enter records it, and holding
+Alt with either one skips it.
 
 The phases are grouped into stages, in the order the server sends them. Each
-stage gets a caption with its name, a rule across the panel and its own
-`closed/total` tally; a phase whose stage the server leaves blank sits under no
-caption at all. The header counts the whole journal the same way, beside the task key — which is
+stage gets a caption with its name, its own `closed/total` tally, and a hairline
+filling whatever the two leave between them; a phase whose stage the server
+leaves blank sits under no caption at all. A rail runs down each row beside its
+checkbox, tinted by that phase's state — drawn per row, so it breaks at every
+stage caption rather than running the whole list's height.
+
+The header counts the whole journal the same way, beside the task key — which is
 a link into the tracker once a Jira site is configured (`task-tab site <url>`)
 and plain text until then. A `round N` badge appears there once a task has been
 through the pipeline more than once; round one shows nothing. Under the list one
@@ -118,7 +123,7 @@ the QA server records the phase on its way out.
 
 With no QA session running — or one running for another task — that screen says
 so, and offers the only thing left to do: **close the phase without a
-checklist**, which records it and goes back to the list. The screen also leaves
+checklist**, which leaves the screen and then records the phase. The screen also leaves
 by itself when the tab moves into another task's group, or when the journal stops
 offering the chip it was reached through.
 
@@ -142,8 +147,9 @@ When the panel is missing and a phase server is in fact running:
 4. **The extension wasn't reloaded after editing `extension/`.** Press
    *Reload* on the card in `chrome://extensions`.
 5. **It is there, showing the QA checklist.** A panel left on that screen looks
-   like another widget entirely — no task key, no phases. The arrow in its
-   top-left corner goes back.
+   like another widget entirely: the checklist brings its own header, so the task
+   key is still there, but the phase rows, the `closed/total` counter and the
+   collapse chevron are not. The arrow in its top-left corner goes back.
 
 ## Install
 
