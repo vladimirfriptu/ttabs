@@ -206,7 +206,14 @@ export const createQaView = ({
   finishError.hidden = true;
   const finishButton = el('button', 'finish');
   finishButton.type = 'button';
-  finishButton.addEventListener('click', onFinish);
+  finishButton.addEventListener('click', () => {
+    // A new attempt is what supersedes the last one's complaint. A render must
+    // not: the poll behind it says nothing about why the finish failed, and
+    // wiping the message fifteen seconds later would only lose it.
+    finishError.hidden = true;
+    finishError.textContent = '';
+    onFinish();
+  });
   // Naming the other side is the honest version of "this closes the phase": the
   // click finishes the session, and the QA server is what records the phase.
   const finishNote = el('div', 'finish-note', `finishes the QA session — the QA server records ${phase} itself`);
@@ -267,8 +274,6 @@ export const createQaView = ({
       const left = uncheckedCount(state.cases);
       finishButton.textContent = left === 0 ? `close ${phase}` : `close ${phase} — ${left} not passed`;
       finishButton.classList.toggle('remaining', left > 0);
-      finishError.hidden = true;
-      finishError.textContent = '';
       foot.hidden = false;
     },
 
@@ -277,6 +282,12 @@ export const createQaView = ({
     // no checklist, and closing the phase by hand is a thing a developer who
     // tested without a session actually wants.
     showEmpty() {
+      tally.hidden = true;
+      foot.hidden = true;
+      // Rebuilt only when it is not already up: a poll every fifteen seconds
+      // would otherwise take the focus off the button under the pointer.
+      if (body.firstElementChild?.classList.contains('empty')) return;
+
       const box = el('div', 'empty');
       box.append(
         el('div', 'empty-line', 'no checklist — no QA session is running'),
@@ -288,8 +299,6 @@ export const createQaView = ({
       box.append(close);
 
       body.replaceChildren(box);
-      tally.hidden = true;
-      foot.hidden = true;
     },
 
     // Attached to the case that failed and wiped by the next render, which
