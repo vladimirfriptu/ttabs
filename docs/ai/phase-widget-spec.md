@@ -224,10 +224,10 @@ POST /api/phase/dev      Body: { "task": "HRS-1234", "action": "reset", "detail"
 `action` ∈ `done` | `skip` | `reset` | `clear` | `wip`.
 
 `clear` was added 2026-08-19: it unrecords one phase and nothing else, and does not
-bump the round. The herdr TUI unticks with it, having found the cascade too costly
-to correct a mis-tick. The browser widget still unticks with `reset`; both are
-valid on the wire, and if the two gestures prove confusing the browser is the one
-to move, since `clear` is the safer default.
+bump the round. **Both the herdr TUI and the browser widget untick with it** — the TUI
+first, having found the cascade too costly for correcting a mis-tick, and the browser
+right after (ttabs commit 33f8b5d). `reset` stays on the wire for a deliberate
+rollback and is typed, not clicked.
 
 A fifteenth phase, **`merged`**, was inserted between `mr-review` and `cleanup` on
 2026-08-19: the MR actually landing, which `cleanup` used to conflate with tearing
@@ -255,16 +255,25 @@ be resolved. `409` on a CLI-side write failure.
 the CLI, which delegates to the fold module. The widget never implements the
 cascade itself.
 
-**Reset-on-untick, and what it must send.** The widget unticks a checkbox by
-sending `reset`, showing the consequence on hover rather than in a dialog — see
-"Reset is on the checkbox" under the widget contract for the settled design and
-for the recovery cost it carries.
+**What untick must send: nothing.** `clear` carries no `detail`, and the
+`reason=untick` requirement an earlier draft imposed is **withdrawn** — it is
+unreachable from either surface and no longer needed.
 
-One requirement follows from it. `history` feeds `/daily`, where a deliberate
-"back to development" and a mis-click must not read the same. So an
-untick-originated reset **must** carry `detail: "reason=untick"`; a reset the user
-meant as a real rollback carries its own reason or none. `by` stays `widget` in
-both cases — it names the surface, not the intent.
+The reasoning it came from still holds, but the answer changed. `history` feeds
+`/daily`, where a deliberate "back to development" must not read like a mis-click.
+When both gestures produced the same verb, a `detail` was the only way to tell them
+apart. They are now different verbs, so **the verb carries the distinction** and a
+detail would only restate it.
+
+What that means for a `/daily`-style reader:
+
+- **`clear`** is a correction, not work. Ignore it when summarising what happened.
+- **`reset`** is the signal that a task went round the pipeline again — it bumps the
+  round, and it is only ever typed deliberately.
+
+A `reset` may still carry its own `--detail "reason=…"`, and that stays useful, but
+it is the author's note rather than something the wire demands. `by` names the
+surface, not the intent, in every case.
 
 **No `open`.** The widget cannot mark a phase `open` on its own. `open` is
 authored by machines (hook, checks.sh, derivation in Stage 2) — a human who
@@ -332,27 +341,26 @@ yet, with one-click closure and Alt+click for skip. That is a widget-side
 choice — this spec fixes only the wire actions (`done`, `skip`, `reset`) and
 that the widget must not fabricate transitions the server doesn't accept.
 
-**Reset is on the checkbox** — settled 2026-08-19, superseding this spec's
-original "reset is not on the checkbox … requires a confirmation step". A row's
-control has two directions: an unrecorded phase becomes `done` (alt-click:
-`skip`), and a recorded one is unticked, which sends `reset` and cascades. No
-separate affordance, no modal; hovering a recorded phase dims every row the
-cascade will reach and the panel's foot names the count.
+**Untick clears one phase** — settled 2026-08-19, after two earlier drafts of this
+spec said otherwise. A row's control has two directions: an unrecorded phase becomes
+`done` (alt-click: `skip`), and a recorded one sends `clear`, which unrecords that
+phase and nothing else. No modal, no preview, no cascade — a mis-tick costs exactly
+one click to undo.
 
-The widget agent's reasoning stands: a checkbox that cannot be unticked is not a
-checkbox, and a modal on every correction of a mis-click costs more than showing
-the consequence beforehand.
+How it got here is worth keeping, because it is the argument for `clear` existing:
 
-**One claim in that reasoning is overstated, and the correction matters.**
-"The journal is append-only, so nothing here is unrecoverable" is true of the
-*history* and false of the *state*. Measured on a task at 13/14: unticking `start`
-drops it to 0/14, and re-ticking `start` restores 1/14, not 13. Recovery costs one
-click per cleared phase. The hover preview is therefore the only guard, and it
-guards a deliberate click — by definition it does not guard the mis-click it was
-introduced for.
+The widget agent's reasoning for putting untick on the checkbox stands — a checkbox
+that cannot be unticked is not a checkbox, and a modal on every correction costs more
+than showing the consequence. But the first version made untick *cascade*, and one
+claim in defending that was overstated: "the journal is append-only, so nothing here
+is unrecoverable" is true of the *history* and false of the *state*. Measured on a
+task at 13/14, unticking `start` dropped it to 0/14, and re-ticking restored 1/14,
+not 13 — one click to destroy, thirteen to rebuild. A hover preview was proposed as
+the guard, but it guards a deliberate click and by definition does not guard the
+mis-click it was introduced for.
 
-That asymmetry is accepted for v1 rather than solved, and the way to close it is
-recorded in "Open questions" below as a possible `POST /api/phase/undo`.
+The owner then used the cascading untick on real work and rejected it. Hence `clear`:
+the everyday correction, and the cascade moved to a verb you have to name.
 
 **Round marker.** When `round > 1`, show it visibly; the fact that this task
 went through the pipeline multiple times is important context. History of
@@ -434,21 +442,22 @@ agent will not read that file:
 3. **Wire-up.** The widget agent's PR references this server; the QA widget's
    scoping and detection code is the closest existing example in ttabs.
 
-## Possible follow-up — `POST /api/phase/undo`
+## Superseded — `POST /api/phase/undo`
 
-Not in v1, and not blocking. It exists here because reset-on-untick makes one
-click cost N clicks to reverse (measured above), and the hover preview does not
-guard the mis-click case it was introduced for.
+**Not needed, and not planned.** Both premises are gone: `clear` unrecords one phase,
+so an untick no longer costs N clicks to reverse, and there is no preview left to be
+inadequate. The measurement that motivated it is kept above on purpose — it is why
+`clear` exists at all.
 
-Shape, if it is ever wanted: a server endpoint (**not** a fourth action — the wire
-actions stay `done` | `skip` | `reset`) that folds the journal as of before the
+Recorded here rather than deleted, in case a future gesture reintroduces the problem.
+Shape, if it ever is wanted: a server endpoint (**not** a fourth action — the wire
+actions stay `done` | `skip` | `clear` | `wip` | `reset`) that folds the journal as of before the
 last mutation and appends compensating records with `by=undo` to restore it. The
 fold module is untouched, no new state joins the model, and history stays honest
 about the undo having happened rather than hiding it. Cost on the widget side is
 one affordance — a toast with an undo button after a cascade would be enough.
 
-Decide it after the widget has been used for real: if hover-preview turns out to
-prevent mis-clicks in practice, this is waste.
+No decision pending: `clear` closed the gap this was for.
 
 ## Open questions the widget agent must answer
 
