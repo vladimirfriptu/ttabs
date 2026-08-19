@@ -80,18 +80,60 @@ protocol it did not design.
 
 Each phase is in one of four states: recorded (`done`), skipped, `open` — the
 phase ran and left something outstanding, and the panel shows why — or not yet
-reached. Clicking a phase's checkbox closes it; alt-click skips it instead.
-The `⟲` next to a phase resets it **and every phase after it**, behind a
-confirmation that names each one it is about to reopen.
+reached. Clicking a phase's checkbox closes it; alt-click skips it instead. The
+keyboard reaches the same write: Tab to a box, then Space or Enter.
 
-There is no way to untick a closed phase directly: reopening a phase cascades
-to everything downstream of it, so it is deliberately a `⟲` plus a
-confirmation rather than a second click on the same checkbox. The one
-exception is `open` — a human can close it by hand, they just cannot put it
-back into that state themselves.
+The phases are grouped into stages, in the order the server sends them. Each
+stage gets a caption with its name, a rule across the panel and its own
+`closed/total` tally; a phase whose stage the server leaves blank sits under no
+caption at all. The header counts the whole journal the same way, beside the task
+key — which is a link into the tracker once a Jira site is configured
+(`task-tab site <url>`) and plain text until then. A `round N` badge appears
+there once a task has been through the pipeline more than once; round one shows
+nothing. Under the list one line says where the journal stands: `next: crit`,
+or `no records yet`, or `all closed`.
 
-A `round N` badge appears in the header once a task has been through the
-pipeline more than once; round one shows nothing.
+Clicking a checkbox that is already ticked clears that phase **and every phase
+after it**. There is no confirmation dialog: hovering the row — or reaching its
+box with Tab — dims every row the click would reach and spells the extent out on
+that line under the list, as `clears 3 phases, from dev`. That preview is the
+whole warning, and it is worth reading, because nothing here walks a cascade
+back: phases are recorded one checkbox at a time.
+
+`open` is the one state a human can only leave, never author: closing it is an
+ordinary click on its box, but nothing in the panel puts a phase into it.
+
+A phase can also carry a destination, drawn as a small chip on its row. The
+server decides which phase gets one and what it says:
+
+- a link chip opens somewhere else in a new tab — a merge request, a pipeline —
+  under the label the server gave it. Only `http` and `https` are followed: a
+  destination the panel cannot trust that far is left out rather than drawn.
+- the `test` chip opens the QA checklist inside the panel itself.
+
+That last one swaps the panel's contents rather than opening anything: the panel
+widens, the phase list steps behind the checklist of the QA session running for
+this task, and the arrow in the top-left corner brings the phases back at the
+original width. It is the same checklist the QA panel shows — areas, cases, a
+note per case, the discrepancies underneath — and the button at its foot names
+the phase it is about to close, plus how many cases are still unpassed. Finishing
+from here does not itself record the phase: the click ends the QA session, and
+the QA server records the phase on its way out.
+
+With no QA session running — or one running for another task — that screen says
+so, and offers the only thing left to do: **close the phase without a
+checklist**, which records it and goes back to the list. The screen also leaves
+by itself when the tab moves into another task's group, or when the journal stops
+offering the chip it was reached through.
+
+A write the server refuses leaves `not saved: …` on the row it belonged to; a
+read it refuses puts the status code in a line at the foot of the panel and
+keeps showing the last journal it did manage to serve. Both give way to the
+next answer that comes back.
+
+The header is also the panel's handle: drag it anywhere, and drag the checklist
+screen by its own header, which stands in while the other is out of sight. Where
+a panel ends up is not remembered — a reload puts it back in its corner.
 
 When the panel is missing and a phase server is in fact running:
 
@@ -103,6 +145,9 @@ When the panel is missing and a phase server is in fact running:
    starting it catches on within that window without reloading the tab.
 4. **The extension wasn't reloaded after editing `extension/`.** Press
    *Reload* on the card in `chrome://extensions`.
+5. **It is there, showing the QA checklist.** A panel left on that screen looks
+   like another widget entirely — no task key, no phases. The arrow in its
+   top-left corner goes back.
 
 ## Install
 
