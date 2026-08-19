@@ -9,6 +9,8 @@ import { rememberActiveTab, restoreFocus } from './chrome/focus.js';
 import { QA_MESSAGE } from './qa/config.js';
 import { TASK_KEY_MESSAGE } from './lib/task-key.js';
 import { call } from './qa/client.js';
+import { PHASE_MESSAGE } from './phases/config.js';
+import { call as callPhaseServer } from './phases/client.js';
 import { readSite, readTitles, writeTitles } from './chrome/store.js';
 import { planUpdates } from './lib/plan.js';
 import { fetchStatuses } from './providers/jira.js';
@@ -91,6 +93,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // content script polls for one and tells a dead server (fetch itself
     // fails, landing here) apart from a real "no session" (a clean 404).
     call(message)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ error: String(e?.message ?? e) }));
+    return true;
+  }
+
+  if (message?.type === PHASE_MESSAGE) {
+    // Same contract as the QA channel: no server running is the normal state,
+    // not an error worth logging, so the failure is handed back for the content
+    // script to absorb quietly.
+    callPhaseServer(message)
       .then(sendResponse)
       .catch((e) => sendResponse({ error: String(e?.message ?? e) }));
     return true;

@@ -22,7 +22,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["qa/*.js", "lib/qa-cases.js", "lib/qa-pending.js", "lib/task-key.js"],
+      "resources": ["qa/*.js", "phases/*.js", "lib/qa-cases.js", "lib/qa-pending.js", "lib/task-key.js", "lib/phases.js"],
       "matches": ["http://localhost/*", "http://127.0.0.1/*"]
     }
   ]
