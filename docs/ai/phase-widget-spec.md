@@ -221,7 +221,13 @@ POST /api/phase/checks   Body: { "task": "HRS-1234", "action": "skip", "detail":
 POST /api/phase/dev      Body: { "task": "HRS-1234", "action": "reset", "detail": "reason=qa-feedback" }
 ```
 
-`action` ∈ `done` | `skip` | `reset`. `detail` is optional; when present, it is
+`action` ∈ `done` | `skip` | `reset` | `clear`.
+
+`clear` was added 2026-08-19: it unrecords one phase and nothing else, and does not
+bump the round. The herdr TUI unticks with it, having found the cascade too costly
+to correct a mis-tick. The browser widget still unticks with `reset`; both are
+valid on the wire, and if the two gestures prove confusing the browser is the one
+to move, since `clear` is the safer default. `detail` is optional; when present, it is
 free-form text passed straight through to the CLI's `--detail`.
 
 The server calls `task-phase.mjs` with `--by widget`, `phase-server` records
