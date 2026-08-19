@@ -276,26 +276,47 @@ export const createQaView = ({
       foot.hidden = false;
     },
 
-    // Two things look like this from here — no session at all, and a session
-    // belonging to another task — and the answer to both is the same: there is
-    // no checklist, and closing the phase by hand is a thing a developer who
-    // tested without a session actually wants.
-    showEmpty() {
+    // Three things look like this from here, and only two of them are knowledge.
+    // No session at all and a session belonging to another task are both a
+    // definitive answer from a server that replied: there is no checklist here,
+    // and closing the phase by hand is a thing a developer who tested without a
+    // session actually wants. A server that did not reply at all ('unreachable')
+    // establishes neither — so it says so, and offers no button, because
+    // recording a phase on the strength of "there is demonstrably no session" is
+    // exactly what is not demonstrated.
+    showEmpty(reason) {
       tally.hidden = true;
       foot.hidden = true;
-      // Rebuilt only when it is not already up: a poll every fifteen seconds
-      // would otherwise take the focus off the button under the pointer.
-      if (body.firstElementChild?.classList.contains('empty')) return;
+      // Not a render — a render deliberately leaves the finish complaint alone.
+      // This screen means the checklist the complaint was about is gone, which is
+      // the one event that ends it: a later session must not find it waiting above
+      // its own button.
+      finishError.hidden = true;
+      finishError.textContent = '';
 
+      // Rebuilt only when it is not already up with this same reason: a poll
+      // every fifteen seconds would otherwise take the focus off the button
+      // under the pointer, and a reason that changed is a different screen.
+      const showing = body.firstElementChild;
+      if (showing?.classList.contains('empty') && showing.dataset.reason === reason) return;
+
+      const unreachable = reason === 'unreachable';
       const box = el('div', 'empty');
-      box.append(
-        el('div', 'empty-line', 'no checklist — no QA session is running for this task'),
-        el('div', 'empty-hint', "start one in the task's session and the cases appear here by themselves"),
-      );
-      const close = el('button', 'close-without', 'close the phase without a checklist');
-      close.type = 'button';
-      close.addEventListener('click', onCloseWithout);
-      box.append(close);
+      box.dataset.reason = reason;
+      const line = unreachable
+        ? 'no checklist — the QA server is not answering'
+        : 'no checklist — no QA session is running for this task';
+      const hint = unreachable
+        ? 'nothing is known about a session until it answers — the phases above come from a different server'
+        : "start one in the task's session and the cases appear here by themselves";
+      box.append(el('div', 'empty-line', line), el('div', 'empty-hint', hint));
+
+      if (!unreachable) {
+        const close = el('button', 'close-without', 'close the phase without a checklist');
+        close.type = 'button';
+        close.addEventListener('click', onCloseWithout);
+        box.append(close);
+      }
 
       body.replaceChildren(box);
     },

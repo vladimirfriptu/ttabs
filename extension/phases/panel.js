@@ -1,7 +1,7 @@
 // The panel's DOM, and nothing else — it renders what it is given and reports
 // clicks back. Deciding what to do with a click is session.js's business.
 
-import { closedCount, groupByStage, hasRecords, qaPhase } from '../lib/phases.js';
+import { closedCount, groupByStage, hintText, qaPhase } from '../lib/phases.js';
 import { safeHref } from '../lib/href.js';
 import { PANEL_CSS } from './styles.js';
 import { makeDraggable } from '../lib/draggable.js';
@@ -48,7 +48,7 @@ const outIcon = ({ className, stroke, size, width }) =>
 
 const CLASS_FOR_STATE = { '': 'pending', done: 'done', skip: 'skip', open: 'open' };
 
-const chipFor = (entry, onChipQa) => {
+const chipFor = (entry, onDrillIn) => {
   if (entry.action.kind === 'link') {
     const chip = el('a', 'chip link', entry.action.label);
     // The url came from the server and was already filtered to http(s); the rel
@@ -64,14 +64,18 @@ const chipFor = (entry, onChipQa) => {
     const chip = el('button', 'chip qa', 'test');
     chip.type = 'button';
     chip.append(icon({ className: 'icon', size: 10, stroke: '#2b6b2b', width: 1.5, paths: ARROW_PATHS }));
-    chip.addEventListener('click', () => onChipQa());
+    chip.addEventListener('click', () => onDrillIn());
     return chip;
   }
 
   return null;
 };
 
-const phaseRow = (entry, onCheck, onChipQa) => {
+// `onDrillIn` is the panel's own way into the checklist screen, not the
+// session's onChipQa callback of the same shape — that one is called from
+// enterQa, one layer up, once this widget knows which phase the journal put the
+// action on.
+const phaseRow = (entry, onCheck, onDrillIn) => {
   const wrapper = el('div', `phase ${CLASS_FOR_STATE[entry.state]}`);
   wrapper.dataset.phase = entry.phase;
 
@@ -124,7 +128,7 @@ const phaseRow = (entry, onCheck, onChipQa) => {
   if (entry.state === 'open') row.append(el('span', 'badge open', 'open'));
 
   if (entry.action) {
-    const chip = chipFor(entry, onChipQa);
+    const chip = chipFor(entry, onDrillIn);
     if (chip) row.append(chip);
   }
 
@@ -152,17 +156,6 @@ const stageCaption = (group) => {
     el('span', 'stage-tally', `${group.closed}/${group.total}`),
   );
   return caption;
-};
-
-// The one line under the list: where the journal stands, in the fewest words the
-// state allows.
-const hintText = (state) => {
-  if (!hasRecords(state.phases)) return 'no records yet';
-  if (state.next) return `next: ${state.next}`;
-  // Only the count the header already shows, read the other way round — no
-  // opinion here about which phase would be next if one were left.
-  if (closedCount(state.phases) === state.phases.length) return 'all closed';
-  return '';
 };
 
 export const createPanel = ({ onCheck, onChipQa, qa }) => {
@@ -437,8 +430,8 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
       if (mode === 'qa') view?.render(qaState);
     },
 
-    showQaEmpty() {
-      if (mode === 'qa') view?.showEmpty();
+    showQaEmpty(reason) {
+      if (mode === 'qa') view?.showEmpty(reason);
     },
 
     showQaError(id, message) {

@@ -104,3 +104,17 @@ export const clearOne = (state, phase) => ({
 export const qaPhase = (phases) => phases.find((p) => p.action?.kind === 'qa')?.phase ?? '';
 
 export const hasRecords = (phases) => phases.some((p) => p.state !== '');
+
+// The one line under the list: where the journal stands, in the fewest words the
+// state allows. Four outcomes, the last of them silence — records exist, the
+// server named no next phase, and something is still not closed. There is
+// nothing honest to say there: which phase would come next is the server's
+// opinion to hold, and this widget has none.
+export const hintText = (state) => {
+  if (!hasRecords(state.phases)) return 'no records yet';
+  if (state.next) return `next: ${state.next}`;
+  // Only the count the header already shows, read the other way round — no
+  // opinion here about which phase would be next if one were left.
+  if (closedCount(state.phases) === state.phases.length) return 'all closed';
+  return '';
+};
