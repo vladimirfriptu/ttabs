@@ -188,7 +188,7 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
   // checklist — it stays built and current behind it, so coming back is a change
   // of visibility rather than a rebuild — but exactly one of the two is visible.
   let mode = 'phases';
-  const qaHost = el('div', 'qa');
+  const qaHost = el('div', 'qa-screen');
   qaHost.hidden = true;
   let view = null;
   // The phase the chip drilled in from, and the name the view's header was built
@@ -196,6 +196,7 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
   // it, and one that moves the action elsewhere rebuilds the view.
   let qaAt = '';
   let viewPhase = '';
+  let viewTask = '';
 
   const style = el('style', null, PANEL_CSS);
   const panel = el('div', 'panel');
@@ -251,6 +252,11 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
   // its text without touching anything else.
   const hint = el('div', 'hint');
 
+  // Declared before the two apply* functions below use it: a change of mode
+  // re-clamps the panel's position, and the handle it moves by is the phase
+  // header, which exists whichever screen is up.
+  const drag = makeDraggable(panel, head);
+
   const applyCollapsed = () => {
     const drilled = mode === 'qa';
     // The checklist brings its own header, scroller and foot: the phase screen's
@@ -271,6 +277,10 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
     // the panel for this screen and only this one.
     panel.classList.toggle('wide', mode === 'qa');
     applyCollapsed();
+    // The 60px it just grew by would hang off the edge of a panel that had been
+    // dragged flush to the right. Clamping belongs to whoever moved it — the
+    // arithmetic is not repeated here.
+    drag.settle();
   };
 
   const exitQa = () => {
@@ -297,15 +307,20 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
 
     // Kept between drill-ins, so the drag handle in its header is registered
     // once — a view rebuilt on every entry would register another every time.
-    // Only a journal that has since renamed the phase forces a rebuild, since
-    // the name is drawn into the header and the button.
-    if (view && viewPhase !== phase) {
+    // Both names it was built with are checked, because both are drawn into it:
+    // a tab dragged into another task's group keeps this panel alive (session.js
+    // bumps its epoch rather than closing it), so a journal that puts the action
+    // on a phase of the same name would otherwise leave the old task's key in
+    // the header of the one screen whose whole guard is that the session's task
+    // is this tab's.
+    if (view && (viewPhase !== phase || viewTask !== current.task)) {
       view.destroy();
       view = null;
     }
 
     if (!view) {
       viewPhase = phase;
+      viewTask = current.task;
       view = createQaView({
         phase,
         task: current.task,
@@ -327,8 +342,6 @@ export const createPanel = ({ onCheck, onChipQa, qa }) => {
     applyMode();
     onChipQa(phase);
   };
-
-  const drag = makeDraggable(panel, head);
 
   // One listener for the whole header, the fold button included — its click
   // bubbles here, which is what makes Enter and Space on it collapse the panel.

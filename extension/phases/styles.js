@@ -282,8 +282,11 @@ export const PANEL_CSS = `
   .panel.wide { width: 420px; }
 
   /* Its own flex column, so .qa-body scrolls inside the panel's max-height
-     instead of the whole screen growing past it. */
-  .qa { display: flex; flex-direction: column; min-height: 0; }
+     instead of the whole screen growing past it.
+     Not .qa, which is also one of the two classes on the phase list's test chip:
+     a bare rule for that name stacked the chip's label above its arrow. The two
+     vocabularies are kept apart by test/panel-css.test.js. */
+  .qa-screen { display: flex; flex-direction: column; min-height: 0; }
 
   .qa-head {
     display: flex;

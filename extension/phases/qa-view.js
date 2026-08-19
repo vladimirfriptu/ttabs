@@ -246,8 +246,8 @@ export const createQaView = ({
     },
 
     render(state) {
-      const passed = state.cases.length - uncheckedCount(state.cases);
-      tally.textContent = `${passed}/${state.cases.length}`;
+      const left = uncheckedCount(state.cases);
+      tally.textContent = `${state.cases.length - left}/${state.cases.length}`;
       tally.hidden = false;
 
       const known = new Set(state.cases.map((c) => c.id));
@@ -271,7 +271,6 @@ export const createQaView = ({
       body.scrollTop = scrollTop;
       restore(snap);
 
-      const left = uncheckedCount(state.cases);
       finishButton.textContent = left === 0 ? `close ${phase}` : `close ${phase} — ${left} not passed`;
       finishButton.classList.toggle('remaining', left > 0);
       foot.hidden = false;

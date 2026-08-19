@@ -120,18 +120,24 @@ export const makeDraggable = (panel, handle) => {
   handle.addEventListener('pointercancel', release);
   handle.addEventListener('lostpointercapture', release);
 
-  // A window shrunk after the panel was dragged would otherwise leave it
-  // half-off the screen. Only a panel that has actually been dragged is
-  // re-placed: an untouched one is still positioned by the stylesheet, and
-  // writing left/top here would silently take that over.
-  window.addEventListener('resize', () => {
+  // Puts the panel back where it already is, which re-clamps it: the window
+  // shrinking under it, or the panel itself growing — the phase panel widens for
+  // its checklist screen — would otherwise leave part of it off the edge, and a
+  // header dragged past the right edge can never be dragged back.
+  //
+  // Only a panel that has actually been dragged is re-placed: an untouched one is
+  // still positioned by the stylesheet, and writing left/top here would silently
+  // take that over.
+  const settle = () => {
     if (!panel.style.left) return;
     place(Number.parseFloat(panel.style.left), Number.parseFloat(panel.style.top));
-  });
+  };
+
+  window.addEventListener('resize', settle);
 
   // True when the pointer travelled far enough that this was a drag, so a
   // click handler on the same element can stand aside. Stays true until the
   // next pointerdown, which is exactly long enough for the click that follows
   // the drag to read it.
-  return { moved: () => moved };
+  return { moved: () => moved, settle };
 };
