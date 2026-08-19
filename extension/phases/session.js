@@ -9,14 +9,19 @@
 import { POLL_MS, DEAD_RETRY_MS, TASK_KEY_PATTERN, PHASE_BASE } from './config.js';
 import { readState, mutate, HttpStatusError } from './bridge.js';
 import { readTaskKey } from '../lib/task-key.js';
+import { readTaskLink } from '../lib/task-link.js';
 import { createPanel } from './panel.js';
-import { applyAction, resetWarning } from '../lib/phases.js';
+import { applyAction, clearFrom } from '../lib/phases.js';
 
 export const startPhaseWatch = () => {
   let timer = null;
   let panel = null;
   let state = null;
   let key = null;
+  // The tracker URL for `key`, resolved once when the key changes rather than
+  // on every poll — it cannot change while the key does not, and a rejected
+  // lookup is not an error, just no link.
+  let link = '';
   let reading = false;
   let deadUntil = 0;
 
@@ -60,6 +65,7 @@ export const startPhaseWatch = () => {
     panel?.destroy();
     panel = null;
     state = null;
+    link = '';
   };
 
   const stop = () => {
@@ -129,7 +135,14 @@ export const startPhaseWatch = () => {
     // A key that changed under us — the tab moved to another group — starts a
     // new epoch too, so an answer already in flight for the old key cannot
     // later paint itself over this task.
-    if (tabKey !== key) { epoch += 1; at = epoch; }
+    if (tabKey !== key) {
+      epoch += 1;
+      at = epoch;
+      // A rejection is the same runtime-message failure as readTaskKey's own —
+      // not "no site configured", which resolves '' — so it is swallowed the
+      // same quiet way and the panel falls back to plain text.
+      link = await readTaskLink(tabKey).catch(() => '');
+    }
     key = tabKey;
 
     let next;
@@ -199,13 +212,14 @@ export const startPhaseWatch = () => {
 
   const show = (next) => {
     state = next;
-    if (!panel) panel = createPanel({ onCheck, onReset });
-    panel.render(state);
+    if (!panel) panel = createPanel({ onCheck, onChipQa });
+    panel.render(state, link);
   };
 
   const onCheck = async (phase, action) => {
     const previous = state;
-    show(applyAction(state, phase, action));
+    const optimistic = action === 'reset' ? clearFrom(state, phase) : applyAction(state, phase, action);
+    show(optimistic);
     const at = epoch;
 
     let answer;
@@ -220,7 +234,7 @@ export const startPhaseWatch = () => {
       // Revert before re-rendering: the optimistic tick claimed something the
       // journal does not say, and the panel is the only place that claim exists.
       state = previous;
-      panel?.render(state);
+      panel?.render(state, link);
       panel?.showError(phase, `not saved: ${e.message}`);
       return;
     } finally {
@@ -241,40 +255,9 @@ export const startPhaseWatch = () => {
     schedule(POLL_MS);
   };
 
-  // A confirmation is modal, so a second click cannot land while it is open —
-  // but it can while the accepted reset is still in flight, and asking again
-  // about a cascade already under way is worse than ignoring the click.
-  let resetting = false;
-
-  const onReset = async (phase) => {
-    if (resetting) return;
-
-    // The cascade is the server's, and it reaches every later phase — so the
-    // confirmation names them, read off the canonical order in the response
-    // rather than a list this widget keeps of its own.
-    if (!window.confirm(resetWarning(state.phases, phase))) return;
-    const at = epoch;
-
-    let answer;
-    resetting = true;
-    mutating += 1;
-    try {
-      answer = await mutate(phase, { task: key, action: 'reset' });
-    } catch (e) {
-      if (epoch !== at) return;
-      panel?.showError(phase, `not reset: ${e.message}`);
-      return;
-    } finally {
-      resetting = false;
-      mutating -= 1;
-    }
-
-    if (epoch !== at) return;
-
-    mutated += 1;
-    show(answer);
-    schedule(POLL_MS);
-  };
+  // QA drill-in lands in the next task; until then the chip is inert rather
+  // than half-built.
+  const onChipQa = () => {};
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {

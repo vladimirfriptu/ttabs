@@ -7,8 +7,10 @@
 // rendering as a fourth unstyled thing.
 //
 // No fold lives here, and none ever will — the reset cascade, the stale-checks
-// downgrade and duplicate suppression all belong to the server. `cascadeFrom`
-// only predicts what the server is about to do, to put it in a confirmation.
+// downgrade and duplicate suppression all belong to the server. `clearFrom` and
+// `applyAction` are optimistic guesses at what the server is about to do, drawn
+// locally so a click repaints at once; the server's own answer always replaces
+// the guess wholesale, never merges with it.
 
 import { safeHref } from './href.js';
 
