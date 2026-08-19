@@ -226,16 +226,28 @@ so the widget reconciles against that rather than trusting its optimistic view.
 
 ## Lifecycle — when the server runs
 
-**Not autostarted, and this is deliberate.** Two writers matter here: the
+**The CLI path never depends on the server.** Two writers matter here: the
 skills/hooks (via CLI, always available) and the widget (via server). The
-widget's absence means "no browser input right now", which is normal — most
-sessions never open ttabs. The CLI path must never depend on the server being
-up.
+server's absence means "no browser input right now" and must change nothing
+about the CLI half.
 
-**Started by a slash command.** `/phase-server` or an equivalent under one of
-the existing commands (decision during Stage 3 integration). Started once per
-machine, not per task — the server is task-agnostic and multiplexes by `task=`.
-Idempotent: a second invocation finding port 47824 already answering exits 0.
+**Started by `starting-a-task`, and by hand via `/phase-server`.** The task
+entry point starts it in its step 3d, silently and ignoring failure, exactly the
+way it already treats `task-tab` and `herdr-label`. The reason is that step 2a
+of that same skill opens the task's Chrome tab group — so `/task` is precisely
+the moment a widget comes into existence and wants a backend.
+
+(An earlier draft of this spec argued the opposite, on the grounds that "most
+sessions never open ttabs". That is false for `/task`, which always opens a
+browser group. Corrected 2026-08-19.)
+
+`creating-task-worktree` deliberately does **not** start it: `/wt` opens no
+Chrome group, so no widget can be watching.
+
+One server per machine, not per task — it is task-agnostic and multiplexes by
+`task=`. Idempotent: a second start finding port 47824 already answering reports
+`STATUS=running` and exits 0. It does not survive a reboot and nothing
+re-launches it, so the first `/task` of the day brings it back.
 
 **Stopped on demand.** The server writes its PID to
 `.claude/state/phase-server.pid`, and the stopping side of the command reads
