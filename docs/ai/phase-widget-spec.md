@@ -93,10 +93,14 @@ New file: `.claude/scripts/phase-server.mjs`, delivered as part of this work.
 **Authentication.** None. It is localhost-only, holds no secrets, and this is
 consistent with `qa-test-server.mjs`. Any client on the machine can call it.
 
-**CORS.** `Access-Control-Allow-Origin: chrome-extension://<ttabs-id>` on every
-response, mirroring the QA server's approach. `chrome-extension://*` if that
-proves too specific — decide when integrating; the widget agent should not
-assume either.
+**CORS is moot — do not spend effort on it.** Every request comes from the
+extension's service worker, which holds the `127.0.0.1` host permission, so no
+`Access-Control-Allow-Origin` is read by anything. The server sends
+`chrome-extension://<ttabs-id>` (resolved from
+`~/.local/share/task-tabs/extension-id`, falling back to `*`) because it is free
+and harmless, but nobody checks it. Nobody should narrow it further for a client
+that never looks. (Corrected 2026-08-19 — an earlier draft treated this as an open
+integration decision.)
 
 **Base path.** `/api/phase`.
 
@@ -131,11 +135,79 @@ ran and left something outstanding — the widget shows this differently from
 "not yet" (an unresolved marker plus the `detail`) rather than treating it as
 work not started.
 
+### `stage` — required on every entry
+
+Display caption for the widget's grouping, present on every entry including one
+with `state: ""`. Phases sharing a stage are **contiguous in the array**, so the
+widget starts a new group whenever `stage` differs from the previous entry. It is
+display text, never an identifier: the widget prints it verbatim and matches
+nothing on it.
+
+The five stages, in canonical order:
+
+| stage | phases |
+|---|---|
+| `planning` | start, spec, plan |
+| `build` | dev, checks |
+| `review` | code-review, crit |
+| `testing` | qa-cases, qa-manual |
+| `handover` | comments, tests-review, mr, mr-review, cleanup |
+
+English, not Russian, because repo text is Ukrainian or English only
+(`.claude/CLAUDE.md`) and `/board` already prints English. Contiguity and the
+12-character ceiling are enforced by tests in `lib/task-phases.test.mjs`.
+
+### `action` — optional, per entry
+
+A chip the widget renders on rows that have somewhere to go. **Omitted entirely**
+when there is nowhere — never `{"kind": "link", "url": ""}`, which would be a chip
+that lies. A payload with no `action` anywhere is valid and renders as a plain
+list.
+
+```json
+{ "phase": "mr", "stage": "handover",
+  "action": { "kind": "link", "label": "!412", "url": "https://gitlab…/-/merge_requests/412" } }
+{ "phase": "qa-manual", "stage": "testing", "action": { "kind": "qa" } }
+```
+
+- **`kind: "link"`** — on `mr` and `mr-review`, built from the `iid` recorded in
+  the `mr` phase's detail plus the local `git remote`. Both rows point at the same
+  MR. `label` is `!<iid>`. Always `https:`.
+- **`kind: "qa"`** — on `qa-manual`, always, and on nothing else. The widget
+  already asks the QA server on 47823 whether a session is live, so it gates the
+  chip on its own knowledge rather than the server's.
+- **`crit` never carries an action, by design.** crit reviews are local JSON under
+  `~/.crit/reviews/` and `crit share` is deliberately never run in this project
+  (`.claude/CLAUDE.md`), so there is no URL to open. This is not an omission to be
+  filled in later — do not build a crit chip.
+
+The MR `iid` reaches the journal from `finalizing-branch` step 6. Before that has
+run there is no MR, so `mr` and `mr-review` carry no `action` — which is the
+correct rendering, not a gap.
+
+### The read path is never allowed to block
+
+`GET /state` reads the journal and nothing else. Two values that are not in the
+journal — the branch and the project's web base — are resolved out of band:
+
+- **`branch`** comes from `task-target.sh`, which costs ~500ms. The read path
+  returns the cached value, or `""` on a first sighting, and refreshes in the
+  background; the branch appears on a later poll. Cache TTL 5 minutes.
+- **the web base** comes from `git remote get-url`, resolved once per process.
+
+Measured: ~1–3ms warm, ~12ms cold. A test in `phase-server.test.mjs` fails the
+build if a warm read exceeds 150ms.
+
 Errors:
 
 - `404` if the branch carries no HRS code (task=… didn't resolve).
-- `409` if `task-target.sh` reports two branches for the code and the widget
-  didn't disambiguate.
+- `409` is **terminal for that task**: the widget shows the status and keeps
+  polling at its normal cadence. There is deliberately no disambiguation channel —
+  no branch list in the body, no `branch=` parameter to answer with.
+
+(An earlier draft said "409 if `task-target.sh` reports two branches for the code
+and the widget didn't disambiguate", which implied a channel that does not exist.
+The widget already implements the reading above. Corrected 2026-08-19.)
 
 The widget always calls with an explicit `task=` query. **No `/state` without
 `task`.** Reasoning: the server has no HTTP-level notion of "which tab" — the
@@ -161,13 +233,40 @@ a follow-up GET). `400` if `action` is missing/invalid. `404` if the task can't
 be resolved. `409` on a CLI-side write failure.
 
 **`reset` cascades.** The server is a thin front — it delegates the cascade to
-the CLI, which delegates to the fold module. The widget must show a
-confirmation before reset (see below), but does not implement the cascade.
+the CLI, which delegates to the fold module. The widget never implements the
+cascade itself.
+
+**Reset-on-untick, and what it must send.** The widget unticks a checkbox by
+sending `reset`, showing the consequence on hover rather than in a dialog. That is
+accepted: nothing is destroyed, because the journal is append-only and `history`
+keeps every round, so an accidental untick is recovered by re-ticking.
+
+One requirement follows from it. `history` feeds `/daily`, where a deliberate
+"back to development" and a mis-click must not read the same. So an
+untick-originated reset **must** carry `detail: "reason=untick"`; a reset the user
+meant as a real rollback carries its own reason or none. `by` stays `widget` in
+both cases — it names the surface, not the intent.
 
 **No `open`.** The widget cannot mark a phase `open` on its own. `open` is
 authored by machines (hook, checks.sh, derivation in Stage 2) — a human who
 wants to walk away without closing a phase simply leaves it in its current
 state. This is the model.
+
+### `qa-manual` is recorded server-side — the widget must not send it
+
+`qa-test-server.mjs`'s finish path records `qa-manual done passed=<n>/<total>`
+when a QA session finishes. **Landed 2026-08-19.** The widget must not also send
+`done` for `qa-manual`; recording is idempotent so a stray one appends nothing,
+but two writes to two servers behind one click is a half-done state nobody can
+reconcile.
+
+Three reasons it belongs on this side: the journal ends up right even if the
+browser is closed or loses the port between the two calls; a QA session finished
+without ever opening ttabs gets recorded too, which it did not before; and the
+widget keeps one source of truth.
+
+The recording never fails the QA summary — phase tracking is optional
+infrastructure, so a failure there is swallowed.
 
 ### `POST /api/phase/refresh` — later
 
@@ -185,10 +284,17 @@ group, extracts the HRS code from the group title (see below), and passes it
 as `task=` on every call. A tab in no task group renders nothing and makes no
 requests — matching how the QA widget already behaves.
 
-**HRS code extraction.** Match `HRS-?\d+` case-insensitively against the group
-title, take the **leftmost** match, uppercase, normalise to `HRS-<digits>`.
-Everything after the code in the title is decoration — `[2] HRS-2388 (waiting on
-design)` still resolves to `HRS-2388`. Matches ttabs' own rules in the sync.
+**HRS code extraction.** The leftmost match of `[A-Z][A-Z0-9]*-\d+`, as ttabs'
+own `keyFromTitle` in `extension/lib/titles.js` defines it. **Case-sensitive, no
+uppercasing** — a group titled `hrs-2388` resolves to no key at all, for this
+widget, the QA widget and the title sync alike. Everything after the code is
+decoration: `[2] HRS-2388 (waiting on design)` still resolves to `HRS-2388`.
+
+(An earlier draft of this spec said "case-insensitively… uppercase, normalise".
+That is not what ttabs does or has ever done. Reusing the existing resolver
+rather than inventing a second grammar is the right call. Making the match
+case-insensitive would be a separate change to `titles.js` that alters sync
+behaviour and needs its own decision. Corrected 2026-08-19.)
 
 **Poll cadence.** `GET /state` every **5 seconds** while the widget is visible.
 Pause polling when the tab is hidden (`document.hidden`) and resume on
@@ -289,7 +395,7 @@ agent will not read that file:
    This is dogfood by the CLI: I can `curl localhost:47824/api/phase/state?...`
    from a session and see what the widget will see.
 2. **Widget, owned by another agent**, against the shipped server. The agent
-   uses this spec as its input and produces `extension/widget-phases/…` in the
+   uses this spec as its input and produces `extension/phases/…` in the
    ttabs repo. The widget agent's spec (its own file) covers the UI and its
    internal architecture.
 3. **Wire-up.** The widget agent's PR references this server; the QA widget's
