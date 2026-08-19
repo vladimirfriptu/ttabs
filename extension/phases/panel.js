@@ -113,6 +113,9 @@ const phaseRow = (entry, index, peek, onCheck, onChipQa) => {
 
   box.addEventListener('keydown', (event) => {
     if (event.key !== ' ' && event.key !== 'Enter') return;
+    // A held key repeats; the mouse cannot produce that, and neither should the
+    // keyboard — every repeat would be another write.
+    if (event.repeat) return;
     // Space on a focused span scrolls the page the panel is floating over.
     event.preventDefault();
     toggle(event);
@@ -199,7 +202,10 @@ export const createPanel = ({ onCheck, onChipQa }) => {
   const taskLink = el('a', 'task');
   taskLink.target = '_blank';
   taskLink.rel = 'noreferrer noopener';
-  const taskOut = outIcon({ className: 'icon', stroke: '#9a9a9a', size: 11, width: 1.4 });
+  const taskKey = el('span', 'key');
+  // Inside the anchor, not beside it: the icon says "this opens the tracker",
+  // and a click on it has to do what it advertises.
+  taskLink.append(taskKey, outIcon({ className: 'icon', stroke: '#9a9a9a', size: 11, width: 1.4 }));
   const round = el('span', 'round');
   const count = el('span', 'count');
   const chevron = el('span', 'chevron', '–');
@@ -212,10 +218,22 @@ export const createPanel = ({ onCheck, onChipQa }) => {
   let noticeText = '';
 
   // What the panel was last told, kept because the panel repaints on its own
-  // when the pointer moves — the peek is nobody else's business.
+  // when the pointer or the focus moves — the preview is nobody else's business.
   let current = null;
   let href = '';
+
+  // The row the preview is drawn from, and the two things that can point at one:
+  // the pointer hovering a row, and the keyboard focusing a box. The pointer
+  // wins while it is over a row — it is the more recent intent — and letting go
+  // of it falls back to wherever the focus still is, rather than to nothing.
   let peek = -1;
+  let hoverAt = -1;
+  let focusAt = -1;
+
+  // Raised for the length of a rebuild. The rebuild takes the focused box out of
+  // the DOM and puts a new one back, which fires focusout and focusin — and
+  // acting on either would recurse into the paint that is running.
+  let painting = false;
 
   // The payload the body currently shows, as JSON. Two consecutive polls almost
   // always carry the same one, and rebuilding the rows throws away whatever had
@@ -233,32 +251,12 @@ export const createPanel = ({ onCheck, onChipQa }) => {
 
   const drag = makeDraggable(panel, head);
 
-  // Which child of the header the press went down on. The click that follows
-  // does not always name it: measured in Chrome, a header that is also a
-  // pointer-capturing drag handle receives the pointerup and the click itself,
-  // whichever child the pointer was actually over. So the header listens once,
-  // for everything, and reads the intent off the press.
-  let pressedKey = false;
-
-  head.addEventListener('pointerdown', (event) => {
-    pressedKey = taskLink.contains(event.target);
-  });
-
   // One listener for the whole header, the fold button included — its click
   // bubbles here, which is what makes Enter and Space on it collapse the panel.
-  head.addEventListener('click', (event) => {
+  head.addEventListener('click', () => {
     // The header is the drag handle as well as the collapse control, and a drag
     // ends in a click on it — without this, moving the panel would fold it too.
     if (drag.moved()) return;
-
-    if (pressedKey) {
-      // The press was on the key but the click did not reach it, so the browser
-      // is not following the link — forward it, and let the anchor's own
-      // listener stop the forwarded click from folding the panel.
-      if (!taskLink.contains(event.target)) taskLink.click();
-      return;
-    }
-
     collapsed = !collapsed;
     applyCollapsed();
   });
@@ -275,14 +273,10 @@ export const createPanel = ({ onCheck, onChipQa }) => {
 
     const key = current.task;
     taskText.textContent = key;
-    taskLink.textContent = key;
+    taskKey.textContent = key;
     taskLink.href = href;
     taskLink.hidden = href === '';
     taskText.hidden = href !== '';
-    // The icon is an <svg>, and `hidden` is an HTMLElement property — assigning
-    // it there sets nothing the stylesheet can see.
-    if (href === '') taskOut.setAttribute('hidden', '');
-    else taskOut.removeAttribute('hidden');
 
     // A task that has been round the pipeline more than once is important
     // context; round 1 is the default and needs no badge.
@@ -301,6 +295,13 @@ export const createPanel = ({ onCheck, onChipQa }) => {
     if (payload !== rendered) {
       rendered = payload;
       const scrollTop = body.scrollTop;
+      // The box is the only focusable thing in the list, and a hover two rows
+      // away rebuilds it — so the phase it belongs to is remembered and the
+      // focus given back to the row of the same name afterwards.
+      const focused = root.activeElement;
+      const focusedPhase = focused?.classList.contains('box') ? focused.closest('.phase').dataset.phase : '';
+
+      painting = true;
       body.replaceChildren();
 
       let index = 0;
@@ -319,6 +320,15 @@ export const createPanel = ({ onCheck, onChipQa }) => {
       // whole panel up and down under the pointer.
       body.append(el('div', 'hint', hintText(current, at)));
       body.scrollTop = scrollTop;
+
+      if (focusedPhase) {
+        const restored = body.querySelector(`.phase[data-phase="${CSS.escape(focusedPhase)}"] .box`);
+        if (restored) restored.focus();
+        // Whether the row survived or not, the index behind the focus preview is
+        // read off the list that was just drawn.
+        focusAt = recordedIndexOf(restored);
+      }
+      painting = false;
     } else {
       // The rebuild is what normally clears a row's error; without one, the
       // same wiping has to happen by hand or a failed click's message would
@@ -329,7 +339,18 @@ export const createPanel = ({ onCheck, onChipQa }) => {
     applyCollapsed();
   };
 
-  const setPeek = (next) => {
+  // Which row a node belongs to, but only when clearing it is a thing that could
+  // happen: an unrecorded row has nothing to clear and previews nothing.
+  const recordedIndexOf = (node) => {
+    const row = node?.closest?.('.phase');
+    if (!row) return -1;
+    const index = Number(row.dataset.index);
+    const entry = current?.phases[index];
+    return entry && entry.state !== '' ? index : -1;
+  };
+
+  const repeek = () => {
+    const next = hoverAt >= 0 ? hoverAt : focusAt;
     if (next === peek) return;
     peek = next;
     paint();
@@ -338,20 +359,36 @@ export const createPanel = ({ onCheck, onChipQa }) => {
   // Delegated to the body rather than bound per row: a repaint replaces every
   // row, and a listener on the node the pointer is over would go with it.
   body.addEventListener('mouseover', (event) => {
-    const row = event.target.closest?.('.phase');
-    if (!row) {
-      setPeek(-1);
-      return;
-    }
-    const index = Number(row.dataset.index);
-    const entry = current?.phases[index];
-    setPeek(entry && entry.state !== '' ? index : -1);
+    hoverAt = recordedIndexOf(event.target);
+    repeek();
   });
 
-  body.addEventListener('mouseleave', () => setPeek(-1));
+  body.addEventListener('mouseleave', () => {
+    hoverAt = -1;
+    repeek();
+  });
+
+  // The keyboard reaches the same write the pointer does, so it gets the same
+  // warning — the preview is what this widget has instead of a confirmation.
+  body.addEventListener('focusin', (event) => {
+    if (painting) return;
+    // Only a box previews. A chip in a recorded row is a link out, and dimming
+    // half the list because the tab order passed through it would be a lie.
+    focusAt = event.target.classList?.contains('box') ? recordedIndexOf(event.target) : -1;
+    repeek();
+  });
+
+  body.addEventListener('focusout', (event) => {
+    if (painting) return;
+    // Focus moving from one box to the next arrives here first; clearing on it
+    // would repaint the list and destroy the box that is about to receive it.
+    if (body.contains(event.relatedTarget)) return;
+    focusAt = -1;
+    repeek();
+  });
 
   fold.append(count, chevron);
-  head.append(taskText, taskLink, taskOut, round, fold);
+  head.append(taskText, taskLink, round, fold);
   panel.append(head, body, foot);
   root.append(style, panel);
   document.documentElement.append(host);

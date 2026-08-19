@@ -74,8 +74,17 @@ export const PANEL_CSS = `
   .icon { flex: none; }
 
   .task { font-weight: 600; }
+  /* A flex row, because the icon it opens with lives inside it — which also
+     means the underline has to go on the text itself: a decoration on a flex
+     container does not reach its items. */
   a.task {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: #1a1a1a;
+    text-decoration: none;
+  }
+  .key {
     text-decoration: underline;
     text-decoration-color: #b8b8b8;
     text-underline-offset: 2px;
@@ -102,9 +111,9 @@ export const PANEL_CSS = `
     border-bottom: 0;
   }
   .panel.collapsed .fold { height: 100%; justify-content: center; }
+  /* The key's icon goes with it — it is inside the anchor. */
   .panel.collapsed .task,
   .panel.collapsed .round,
-  .panel.collapsed .head .icon,
   .panel.collapsed .count { display: none; }
   .panel.collapsed .chevron { font-size: 20px; }
 

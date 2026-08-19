@@ -1,7 +1,8 @@
 // Lets a floating panel be dragged out of the way by its own header.
 //
-// Both widgets' headers are collapse buttons as well as drag handles, so the
-// hard part is not the moving — it is telling a click apart from a drag. A
+// Both widgets' headers collapse the panel as well as drag it — the QA panel's
+// is a button, the phase panel's a row with a button and a link inside it — so
+// the hard part is not the moving but telling a click apart from a drag. A
 // caller asks `moved()` at the top of its click handler and bails out when the
 // pointer travelled: nothing here cancels the event, because suppressing a
 // click from a capture-phase listener makes the two features depend on listener
@@ -56,11 +57,8 @@ export const makeDraggable = (panel, handle) => {
     origin = { x: event.clientX, y: event.clientY, left: box.left, top: box.top };
     moved = false;
 
-    // Capture, so a fast drag that outruns the cursor keeps sending events here
-    // instead of stranding the panel mid-move when the pointer leaves the
-    // header. It also means no listener has to be added to the page's document.
-    handle.setPointerCapture(event.pointerId);
-    // Otherwise the header's text starts selecting under the drag.
+    // No capture yet — see pointermove. Otherwise the header's text starts
+    // selecting under the drag.
     event.preventDefault();
   });
 
@@ -72,8 +70,21 @@ export const makeDraggable = (panel, handle) => {
 
     if (!moved && Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
 
-    moved = true;
-    panel.classList.add('dragging');
+    if (!moved) {
+      moved = true;
+      // Captured on the transition to a drag, never on the press. An active
+      // capture makes every later pointer event for this id — and the click
+      // derived from it — dispatch at the handle, which steals the click from
+      // any interactive child a header has (the phase panel's task link, its
+      // collapse button). From here on it is what keeps a fast drag that
+      // outruns the cursor from stranding the panel mid-move when the pointer
+      // leaves the header, with no listener on the page's document. Within the
+      // first 4px the pointer is still over the header, and a move over a child
+      // bubbles to the handle anyway.
+      handle.setPointerCapture(event.pointerId);
+      panel.classList.add('dragging');
+    }
+
     place(origin.left + dx, origin.top + dy);
   });
 
