@@ -65,6 +65,17 @@ export const makeDraggable = (panel, handle) => {
   handle.addEventListener('pointermove', (event) => {
     if (!origin) return;
 
+    // A move with no button held, while an origin is still set, means the press
+    // ended somewhere this listener never saw it: nothing is captured until the
+    // threshold, so a flick that left the header before those 4px sent its
+    // pointerup to another node and release() never ran. Left alone, the stale
+    // origin makes the next bare hover over the header cross the threshold and
+    // carry the panel off with the cursor.
+    if (event.buttons === 0) {
+      origin = null;
+      return;
+    }
+
     const dx = event.clientX - origin.x;
     const dy = event.clientY - origin.y;
 

@@ -162,12 +162,6 @@ export const PANEL_CSS = `
     background: #fff;
     cursor: pointer;
   }
-  /* The only thing in the list that writes, and now the only focusable thing in
-     the panel besides the header — without a ring, a keyboard user is blind. */
-  .box:focus-visible {
-    outline: 2px solid #3f7a3f;
-    outline-offset: 2px;
-  }
   .phase.done .box { background: #3f7a3f; border-color: #3f7a3f; }
   .phase.open .box { background: #fff8e6; border-color: #d99b00; }
 
@@ -225,6 +219,15 @@ export const PANEL_CSS = `
     background: #f2f8f2;
   }
   .chip.qa:hover { background: #e8f2e8; border-color: #a9c9a9; }
+
+  /* Everything in the list a keyboard reaches: the box that writes, and the chips
+     that lead out of the panel. One ring for all of them, because the user agent
+     draws none inside this shadow root that survived testing. */
+  .box:focus-visible,
+  .chip:focus-visible {
+    outline: 2px solid #3f7a3f;
+    outline-offset: 2px;
+  }
 
   /* The extent of the cascade the next click would run, shown on the rows it
      would reach. Set after the state rules, which it deliberately overrides at

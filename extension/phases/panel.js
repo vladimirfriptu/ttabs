@@ -70,16 +70,12 @@ const chipFor = (entry, onChipQa) => {
   return null;
 };
 
-const phaseRow = (entry, index, peek, onCheck, onChipQa) => {
+const phaseRow = (entry, index, onCheck, onChipQa) => {
   const wrapper = el('div', `phase ${CLASS_FOR_STATE[entry.state]}`);
   wrapper.dataset.phase = entry.phase;
-  // The hover handler is delegated to the body, which survives a rebuild — so
+  // The hover handler is delegated to the body, which outlives any one row — so
   // the row has to say where it sits in the list rather than close over it.
   wrapper.dataset.index = String(index);
-  // Everything from the hovered row down is about to be cleared; showing that
-  // before the click is what replaces the confirmation dialog.
-  const fading = peek >= 0 && index >= peek;
-  if (fading) wrapper.classList.add('fading');
 
   const gutter = el('span', 'gutter');
   const box = el('span', 'box');
@@ -230,15 +226,16 @@ export const createPanel = ({ onCheck, onChipQa }) => {
   let hoverAt = -1;
   let focusAt = -1;
 
-  // Raised for the length of a rebuild. The rebuild takes the focused box out of
-  // the DOM and puts a new one back, which fires focusout and focusin — and
-  // acting on either would recurse into the paint that is running.
-  let painting = false;
-
   // The payload the body currently shows, as JSON. Two consecutive polls almost
   // always carry the same one, and rebuilding the rows throws away whatever had
-  // the keyboard focus.
+  // the keyboard focus. The preview is not in it: dimming is presentation, and a
+  // hover that rebuilt the list would pull the box out from under the click that
+  // is on its way.
   let rendered = null;
+
+  // The line under the list, kept across rebuilds because the preview rewrites
+  // its text without touching anything else.
+  const hint = el('div', 'hint');
 
   const applyCollapsed = () => {
     body.hidden = collapsed;
@@ -284,24 +281,10 @@ export const createPanel = ({ onCheck, onChipQa }) => {
     round.hidden = current.round <= 1;
     count.textContent = `${closedCount(current.phases)}/${current.phases.length}`;
 
-    // The pointer may still be over a row the answer in hand no longer supports:
-    // the server has since cleared that phase, or dropped it from the list
-    // altogether. Either way there is nothing left there to clear, and an index
-    // past the end would take hintText down with it.
-    const peeked = peek >= 0 ? current.phases[peek] : undefined;
-    const at = peeked && peeked.state !== '' ? peek : -1;
-
-    const payload = JSON.stringify({ state: current, peek: at, href });
+    const payload = JSON.stringify({ state: current, href });
     if (payload !== rendered) {
       rendered = payload;
       const scrollTop = body.scrollTop;
-      // The box is the only focusable thing in the list, and a hover two rows
-      // away rebuilds it — so the phase it belongs to is remembered and the
-      // focus given back to the row of the same name afterwards.
-      const focused = root.activeElement;
-      const focusedPhase = focused?.classList.contains('box') ? focused.closest('.phase').dataset.phase : '';
-
-      painting = true;
       body.replaceChildren();
 
       let index = 0;
@@ -310,7 +293,7 @@ export const createPanel = ({ onCheck, onChipQa }) => {
         // over a nameless group would be a heading for nothing.
         if (group.stage) body.append(stageCaption(group));
         for (const entry of group.phases) {
-          body.append(phaseRow(entry, index, at, onCheck, onChipQa));
+          body.append(phaseRow(entry, index, onCheck, onChipQa));
           index += 1;
         }
       }
@@ -318,17 +301,9 @@ export const createPanel = ({ onCheck, onChipQa }) => {
       // Always appended, empty text included: the panel is anchored to the
       // bottom of the window, so a hint line that came and went would push the
       // whole panel up and down under the pointer.
-      body.append(el('div', 'hint', hintText(current, at)));
+      body.append(hint);
       body.scrollTop = scrollTop;
-
-      if (focusedPhase) {
-        const restored = body.querySelector(`.phase[data-phase="${CSS.escape(focusedPhase)}"] .box`);
-        if (restored) restored.focus();
-        // Whether the row survived or not, the index behind the focus preview is
-        // read off the list that was just drawn.
-        focusAt = recordedIndexOf(restored);
-      }
-      painting = false;
+      applyPeek();
     } else {
       // The rebuild is what normally clears a row's error; without one, the
       // same wiping has to happen by hand or a failed click's message would
@@ -349,11 +324,28 @@ export const createPanel = ({ onCheck, onChipQa }) => {
     return entry && entry.state !== '' ? index : -1;
   };
 
+  // The preview is drawn onto the rows that are already there, never by building
+  // new ones: the box a click is landing on has to survive until the click.
+  //
+  // The index is re-checked against the state in hand rather than trusted — the
+  // pointer can still be over a row a poll has since cleared or dropped, and an
+  // index past the end would take hintText down with it.
+  const applyPeek = () => {
+    if (!current) return;
+
+    const peeked = peek >= 0 ? current.phases[peek] : undefined;
+    const at = peeked && peeked.state !== '' ? peek : -1;
+
+    const rows = body.querySelectorAll('.phase');
+    rows.forEach((row, index) => row.classList.toggle('fading', at >= 0 && index >= at));
+    hint.textContent = hintText(current, at);
+  };
+
   const repeek = () => {
     const next = hoverAt >= 0 ? hoverAt : focusAt;
     if (next === peek) return;
     peek = next;
-    paint();
+    applyPeek();
   };
 
   // Delegated to the body rather than bound per row: a repaint replaces every
@@ -371,18 +363,13 @@ export const createPanel = ({ onCheck, onChipQa }) => {
   // The keyboard reaches the same write the pointer does, so it gets the same
   // warning — the preview is what this widget has instead of a confirmation.
   body.addEventListener('focusin', (event) => {
-    if (painting) return;
     // Only a box previews. A chip in a recorded row is a link out, and dimming
     // half the list because the tab order passed through it would be a lie.
     focusAt = event.target.classList?.contains('box') ? recordedIndexOf(event.target) : -1;
     repeek();
   });
 
-  body.addEventListener('focusout', (event) => {
-    if (painting) return;
-    // Focus moving from one box to the next arrives here first; clearing on it
-    // would repaint the list and destroy the box that is about to receive it.
-    if (body.contains(event.relatedTarget)) return;
+  body.addEventListener('focusout', () => {
     focusAt = -1;
     repeek();
   });
