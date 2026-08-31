@@ -201,10 +201,9 @@ test('a pointercancel is enough to end a drag that was never captured', () => {
   });
 });
 
-// applyMode() calls settle() every time the panel changes screen, and the phase
-// panel grows from 360 to 420 on the way into its checklist. withWindow's
-// addEventListener is a noop, so the resize path never reaches this code from a
-// test — and the mode change is the other caller, exercised here.
+// withWindow's addEventListener is a noop, so the `resize` path never reaches
+// this code from a test; the exported settle() is the same code by the other
+// door, and a panel that grew is the case worth pinning.
 test('settle re-clamps a panel that grew wider than the room to its right', () => {
   withWindow(() => {
     const handle = fakeHandle();
@@ -224,8 +223,7 @@ test('settle re-clamps a panel that grew wider than the room to its right', () =
 });
 
 // A panel nobody has dragged is still positioned by the stylesheet's own corner
-// anchoring; writing left/top here would silently take that over — and every mode
-// change calls settle().
+// anchoring; writing left/top here would silently take that over.
 test('settle leaves an undragged panel to the stylesheet', () => {
   withWindow(() => {
     const handle = fakeHandle();

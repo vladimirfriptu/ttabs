@@ -13,10 +13,9 @@ import { QA_BASE } from './config.js';
 // origin, so it is checked here rather than trusted.
 const VALID_PATH = /^\/api\/qa\/(state|finish|case\/[^/]+)$/;
 
-// The same three seconds the phase channel uses, for the same reason: a request
-// that is never answered must fail rather than leave the panel's in-flight flag
-// set for good. It is far more than a local checklist read takes, and well
-// inside both this server's poll cadences.
+// A request that is never answered must fail rather than leave the panel's
+// in-flight flag set for good. Three seconds is far more than a local checklist
+// read takes, and well inside both of this server's poll cadences.
 const REQUEST_TIMEOUT_MS = 3000;
 
 export const call = async ({ method = 'GET', path, body }) => {

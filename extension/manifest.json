@@ -16,13 +16,13 @@
   "content_scripts": [
     {
       "matches": ["http://localhost/*", "http://127.0.0.1/*"],
-      "js": ["qa/boot.js", "phases/boot.js"],
+      "js": ["qa/boot.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["qa/*.js", "phases/*.js", "lib/qa-cases.js", "lib/qa-pending.js", "lib/task-key.js", "lib/task-link.js", "lib/phases.js", "lib/href.js", "lib/draggable.js"],
+      "resources": ["qa/*.js", "lib/qa-cases.js", "lib/qa-pending.js", "lib/task-key.js", "lib/draggable.js"],
       "matches": ["http://localhost/*", "http://127.0.0.1/*"]
     }
   ]

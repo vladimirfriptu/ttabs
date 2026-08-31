@@ -66,112 +66,21 @@ answered. It says nothing at the default level, since most tasks never run a
 checklist server and a widget should not narrate its idleness into someone
 else's console.
 
-## Phase panel
+## The server behind the panel
 
-A second floating panel, bottom-left this time (the QA checklist keeps
-bottom-right, and the two can be open together), lists a task's pipeline
-phases whenever the tab is on `localhost` inside a task group. It reads and
-writes a local phase server on port `47824`. With nothing listening there the
-panel never appears, quietly — it retries once a minute rather than giving up
-for good, since the server does not survive a reboot and nothing brings it
-back automatically.
+The panel is only a client. The extension ships no server: the checklist comes
+from something listening on `47823`, on the developer's own machine. With nothing
+there, the panel stays away and the rest of the extension carries on as if it did
+not exist — no error, no placeholder, nothing in the console at the default
+level.
 
-Serving that journal is, like the QA server, somebody else's job: the
-extension only talks to whatever answers on that port, on a small fixed
-protocol it did not design.
+That also means nobody has to use the server behind it today. Anyone can write
+their own — in any language, over an afternoon — and the panel will pick it up.
+What it requires of that server is written down in
+[docs/qa-server-contract.md](./docs/qa-server-contract.md): the routes, the
+fields, which of them are optional, what the widget does with an answer it does
+not recognise, and the handful of promises a server has to keep.
 
-Each phase is in one of four states: recorded (`done`), skipped, `open` — the
-phase ran and left something outstanding, and the panel shows why — or not yet
-reached. Clicking a phase's checkbox closes it; alt-click skips it instead. The
-keyboard reaches both: Tab to a box, then Space or Enter records it, and holding
-Alt with either one skips it — on a phase that has no record yet, since on a
-recorded one both chords clear it instead.
-
-The phases are grouped into stages, in the order the server sends them. Each
-stage gets a caption with its name, its own `closed/total` tally, and a hairline
-filling whatever the two leave between them; a phase whose stage the server
-leaves blank sits under no caption at all. A rail runs down each row beside its
-checkbox, tinted by that phase's state — drawn per row, so it breaks at every
-stage caption rather than running the whole list's height.
-
-The header counts the whole journal the same way, beside the task key — which is
-a link into the tracker once a Jira site is configured (`task-tab site <url>`)
-and plain text until then. A `round N` badge appears there once a task has been
-through the pipeline more than once; round one shows nothing. Under the list one
-line says where the journal stands, in one of four ways: `no records yet` until
-something is recorded, then `next: crit` whenever the server names a next phase,
-`all closed` once every phase is done or skipped, and nothing at all in the case
-none of those covers — a journal with records, no next phase named, and a phase
-still not closed. Which phase would come next is the server's to say, so the
-widget says nothing rather than guessing.
-
-Clicking a checkbox that is already ticked clears that one phase, and nothing
-else — a mis-tick costs exactly the tick it took to make.
-
-`open` is the one state a human can only leave, never author: closing it is an
-ordinary click on its box, but nothing in the panel puts a phase into it.
-
-A phase can also carry a destination, drawn as a small chip on its row. The
-server decides which phase gets one and what it says:
-
-- a link chip opens somewhere else in a new tab — a merge request, a pipeline —
-  under the label the server gave it. Only `http` and `https` are followed: a
-  destination the panel cannot trust that far is left out rather than drawn.
-- the `test` chip opens the QA checklist inside the panel itself.
-
-That last one swaps the panel's contents rather than opening anything: the panel
-widens, the phase list steps behind the checklist of the QA session running for
-this task, and the arrow in the top-left corner brings the phases back at the
-original width. It is the same checklist the QA panel shows — areas, cases, a
-note per case, the discrepancies underneath — and the button at its foot names
-the phase it is about to close, plus how many cases are still unpassed. Finishing
-from here does not itself record the phase: the click ends the QA session, and
-the QA server records the phase on its way out.
-
-With no QA session running — or one running for another task — that screen says
-so, and offers the only thing left to do: **close the phase without a
-checklist**, which leaves the screen and then records the phase. The screen also leaves
-by itself when the tab moves into another task's group, or when the journal stops
-offering the chip it was reached through.
-
-A write the server refuses leaves `not saved: …` on the row it belonged to; a
-read it refuses puts the status code in a line at the foot of the panel and
-keeps showing the last journal it did manage to serve. Both give way to the
-next answer that comes back.
-
-The header is also the panel's handle: drag it anywhere, and drag the checklist
-screen by its own header, which stands in while the other is out of sight. Where
-a panel ends up is not remembered — a reload puts it back in its corner.
-
-When the panel is missing and a phase server is in fact running:
-
-1. **The tab isn't in a task's tab group.** Only a tab whose group carries a
-   recognisable key gets a panel at all.
-2. **The group title was renamed past recognition.** The panel needs a key in
-   the title exactly like the CLI does — see "Keep the key in the title" above.
-3. **The phase server isn't running.** The panel checks once a minute, so
-   starting it catches on within that window without reloading the tab.
-4. **The extension wasn't reloaded after editing `extension/`.** Press
-   *Reload* on the card in `chrome://extensions`.
-5. **It is there, showing the QA checklist.** A panel left on that screen looks
-   like another widget entirely: the checklist brings its own header, so the task
-   key is still there, but the phase rows, the `closed/total` counter and the
-   collapse chevron are not. The arrow in its top-left corner goes back.
-
-## The servers behind the two panels
-
-Both panels are clients. The extension ships neither server: the checklist comes
-from something listening on `47823`, the phase journal from something listening
-on `47824`, and both live on the developer's own machine. With nothing there, the
-panels stay away and the rest of the extension carries on as if they did not
-exist — no error, no placeholder, nothing in the console at the default level.
-
-That also means nobody has to use the servers behind them today. Anyone can write
-their own — in any language, over an afternoon — and the two panels will pick it
-up. What they require of it is written down in
-[docs/phase-server-contract.md](./docs/phase-server-contract.md): the routes, the
-fields, which of them are optional, what a widget does with an answer it does not
-recognise, and the handful of promises a server has to keep.
 
 ## Install
 

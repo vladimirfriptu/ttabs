@@ -1,9 +1,8 @@
 // Lets a floating panel be dragged out of the way by its own header.
 //
-// Both widgets' headers collapse the panel as well as drag it — the QA panel's
-// is a button, the phase panel's a row with a button and a link inside it — so
-// the hard part is not the moving but telling a click apart from a drag. A
-// caller asks `moved()` at the top of its click handler and bails out when the
+// The panel's header collapses it as well as drags it, so the hard part is not
+// the moving but telling a click apart from a drag. A caller asks `moved()` at
+// the top of its click handler and bails out when the
 // pointer travelled: nothing here cancels the event, because suppressing a
 // click from a capture-phase listener makes the two features depend on listener
 // order, and this way each one reads on its own.
@@ -93,8 +92,8 @@ export const makeDraggable = (panel, handle) => {
       // Captured on the transition to a drag, never on the press. An active
       // capture makes every later pointer event for this id — and the click
       // derived from it — dispatch at the handle, which steals the click from
-      // any interactive child a header has (the phase panel's task link, its
-      // collapse button). From here on it is what keeps a fast drag that
+      // any interactive child the header has (its collapse button). From here
+      // on it is what keeps a fast drag that
       // outruns the cursor from stranding the panel mid-move when the pointer
       // leaves the header, with no listener on the page's document. Within the
       // first 4px the pointer is still over the header, and a move over a child
@@ -121,9 +120,10 @@ export const makeDraggable = (panel, handle) => {
   handle.addEventListener('lostpointercapture', release);
 
   // Puts the panel back where it already is, which re-clamps it: the window
-  // shrinking under it, or the panel itself growing — the phase panel widens for
-  // its checklist screen — would otherwise leave part of it off the edge, and a
-  // header dragged past the right edge can never be dragged back.
+  // shrinking under it, or the panel itself growing, would otherwise leave part
+  // of it off the edge, and a header dragged past the right edge can never be
+  // dragged back. Exported as well as wired to `resize`, for a caller that
+  // changes the panel's own size.
   //
   // Only a panel that has actually been dragged is re-placed: an untouched one is
   // still positioned by the stylesheet, and writing left/top here would silently
